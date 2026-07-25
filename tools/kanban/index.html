@@ -54,6 +54,18 @@
   .brand { display: flex; align-items: baseline; gap: 10px; }
   .brand-name { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
   .brand-sub { font-size: 12.5px; color: var(--ink-dim); }
+  .projectbar { display: flex; align-items: center; gap: 8px; padding: 8px 28px 12px; flex-wrap: wrap; }
+  .projectbar select, .projectbar input { height: 34px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); padding: 0 10px; }
+  .projectbar select { min-width: 180px; font-weight: 650; }
+  .projectbar input { width: 150px; }
+  .projectbar .prefix-input { width: 96px; text-transform: uppercase; }
+  .toolbar-btn { height: 34px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); padding: 0 11px; font-weight: 650; color: var(--ink-dim); }
+  .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar-btn.primary { border-color: var(--ink); background: var(--ink); color: #fff; }
+  .project-form { display: flex; gap: 6px; align-items: center; }
+  .project-form[hidden], .auth-control[hidden] { display: none; }
+  .auth-control { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+  .project-status { color: var(--ink-faint); font-size: 12px; white-space: nowrap; }
 
   .view-tabs { display: flex; gap: 4px; background: var(--surface-sunken); border-radius: 10px; padding: 3px; }
   .view-tabs button { border: none; background: transparent; color: var(--ink-dim); font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 8px; transition: background-color .15s ease, color .15s ease; }
@@ -178,6 +190,16 @@
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 200; }
   #toast.is-shown { opacity: 1; transform: translateX(-50%) translateY(0); }
   #toast.is-error { background: var(--crit); }
+
+  @media (max-width: 760px) {
+    .topbar-row1, .projectbar { padding-left: 14px; padding-right: 14px; }
+    .brand-sub { display: none; }
+    .projectbar select { min-width: 0; flex: 1; }
+    .project-form { width: 100%; flex-wrap: wrap; }
+    .project-form input { flex: 1; min-width: 110px; }
+    .auth-control { width: 100%; margin-left: 0; }
+    .auth-control input { flex: 1; width: auto; }
+  }
 </style>
 
 <div class="topbar">
@@ -189,6 +211,22 @@
     <div class="view-tabs" role="tablist">
       <button type="button" class="is-active" data-view="board" role="tab">看板</button>
       <button type="button" data-view="roadmap" role="tab">藍圖</button>
+    </div>
+  </div>
+  <div class="projectbar">
+    <select id="project-select" aria-label="目前專案"></select>
+    <button type="button" class="toolbar-btn" id="project-add-toggle" title="新增專案">＋</button>
+    <span class="project-status" id="project-status"></span>
+    <div class="project-form" id="project-form" hidden>
+      <input id="project-name" placeholder="專案名稱" autocomplete="off">
+      <input id="project-id" placeholder="project-id" class="mono" autocomplete="off">
+      <input id="project-prefix" placeholder="PREFIX" class="mono prefix-input" maxlength="12" autocomplete="off">
+      <button type="button" class="toolbar-btn primary" id="project-create">建立</button>
+      <button type="button" class="toolbar-btn" id="project-cancel">取消</button>
+    </div>
+    <div class="auth-control" id="auth-control" hidden>
+      <input type="password" id="token-input" placeholder="Bearer token" autocomplete="off">
+      <button type="button" class="toolbar-btn" id="token-apply">套用</button>
     </div>
   </div>
 </div>
@@ -211,6 +249,9 @@
 (function () {
   "use strict";
   var COMMENT_AUTHOR = ""; // 開頁時由 /api/config 帶入本機 git user.name
+  var AUTH_REQUIRED = false;
+  var API_TOKEN = "";
+  try { API_TOKEN = sessionStorage.getItem("monstrare-token") || ""; } catch (_) {}
 
   var STAGES = [
     { id: "backlog",       label: "Backlog 待辦",      color: "#5b6472" },
@@ -224,6 +265,8 @@
 
   var TICKETS = [];
   var EPICS = [];
+  var PROJECTS = [];
+  var ACTIVE_PROJECT = "__all__";
   var openId = null;
   var currentView = "board";
 
@@ -242,35 +285,83 @@
 
   /* ── API ── */
   function api(path, options) {
-    return fetch(path, options).then(function (res) {
+    var opts = Object.assign({}, options || {});
+    opts.headers = Object.assign({}, opts.headers || {});
+    if (API_TOKEN) opts.headers.Authorization = "Bearer " + API_TOKEN;
+    return fetch(path, opts).then(function (res) {
       if (!res.ok) return res.json().then(function (e) { throw new Error(e.error || res.statusText); });
       return res.json();
     });
   }
+  function projectPath(pid, suffix) {
+    return "/api/projects/" + encodeURIComponent(pid) + suffix;
+  }
+  function projectForTicket(tk) {
+    return tk.project || (ACTIVE_PROJECT !== "__all__" ? ACTIVE_PROJECT : "");
+  }
+  function renderProjectControls() {
+    var select = document.getElementById("project-select");
+    select.innerHTML = '<option value="__all__">全部專案</option>' + PROJECTS.map(function (project) {
+      return '<option value="' + escapeHtml(project.id) + '">' + escapeHtml(project.name) + " · " + escapeHtml(project.prefix) + "</option>";
+    }).join("");
+    select.value = ACTIVE_PROJECT;
+    document.getElementById("project-status").textContent = TICKETS.length + " 張卡 · " + PROJECTS.length + " 個專案";
+    document.getElementById("auth-control").hidden = !AUTH_REQUIRED;
+    document.getElementById("token-input").value = API_TOKEN;
+  }
+  function loadProjectData() {
+    var cardsRequest = ACTIVE_PROJECT === "__all__"
+      ? api("/api/cards")
+      : api(projectPath(ACTIVE_PROJECT, "/cards"));
+    var epicsRequest = ACTIVE_PROJECT === "__all__"
+      ? Promise.all(PROJECTS.map(function (project) { return api(projectPath(project.id, "/epics")); }))
+          .then(function (groups) { return { epics: groups.reduce(function (all, group) { return all.concat(group.epics || []); }, []) }; })
+      : api(projectPath(ACTIVE_PROJECT, "/epics"));
+    return Promise.all([cardsRequest, epicsRequest]).then(function (values) {
+      TICKETS = values[0];
+      EPICS = values[1].epics || [];
+    });
+  }
   function loadAll() {
-    return Promise.all([
-      api("/api/cards").then(function (list) { TICKETS = list; }),
-      api("/api/epics").then(function (data) { EPICS = data.epics || []; }),
-      api("/api/config").then(function (cfg) { COMMENT_AUTHOR = cfg.owner || "匿名"; })
-    ]);
+    return Promise.all([api("/api/config"), api("/api/projects")]).then(function (values) {
+      COMMENT_AUTHOR = values[0].owner || "匿名";
+      AUTH_REQUIRED = !!values[0].authRequired;
+      PROJECTS = values[1];
+      var saved = "";
+      try { saved = sessionStorage.getItem("monstrare-project") || ""; } catch (_) {}
+      if (saved === "__all__" || PROJECTS.some(function (p) { return p.id === saved; })) ACTIVE_PROJECT = saved;
+      else ACTIVE_PROJECT = PROJECTS.length ? PROJECTS[0].id : "__all__";
+      renderProjectControls();
+      return loadProjectData();
+    });
   }
   function saveOne(tk) {
-    return api("/api/cards/" + encodeURIComponent(tk.id), {
+    var pid = projectForTicket(tk);
+    return api(projectPath(pid, "/cards/" + encodeURIComponent(tk.id)), {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(tk)
     }).catch(function (err) { showToast("儲存失敗：" + err.message, true); throw err; });
   }
   function saveBulk(list) {
-    return api("/api/cards", {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(list)
-    }).catch(function (err) { showToast("儲存失敗：" + err.message, true); throw err; });
+    var groups = {};
+    list.forEach(function (tk) {
+      var pid = projectForTicket(tk);
+      if (!groups[pid]) groups[pid] = [];
+      groups[pid].push(tk);
+    });
+    return Promise.all(Object.keys(groups).map(function (pid) {
+      return api(projectPath(pid, "/cards"), {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(groups[pid])
+      });
+    })).catch(function (err) { showToast("儲存失敗：" + err.message, true); throw err; });
   }
   function createCard(input) {
-    return api("/api/cards", {
+    if (ACTIVE_PROJECT === "__all__") return Promise.reject(new Error("請先選擇專案"));
+    return api(projectPath(ACTIVE_PROJECT, "/cards"), {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)
     }).catch(function (err) { showToast("新增失敗：" + err.message, true); throw err; });
   }
-  function deleteCard(id) {
-    return api("/api/cards/" + encodeURIComponent(id), { method: "DELETE" })
+  function deleteCard(tk) {
+    return api(projectPath(projectForTicket(tk), "/cards/" + encodeURIComponent(tk.id)), { method: "DELETE" })
       .catch(function (err) { showToast("刪除失敗：" + err.message, true); throw err; });
   }
 
@@ -291,6 +382,7 @@
     var badges = '<span class="pill risk-' + tk.risk + '">' + riskLabel(tk.risk) + "</span>";
     if (tk.track && tk.track !== "n/a") badges += '<span class="pill track-pill">' + trackLabel(tk.track) + "</span>";
     if (tk.agent) badges += '<span class="pill agent-pill">' + escapeHtml(tk.agent) + "</span>";
+    if (ACTIVE_PROJECT === "__all__" && tk.project) badges += '<span class="pill track-pill">' + escapeHtml(tk.project) + "</span>";
     if (tk.approvalRequired) badges += '<span class="pill approval-pill">需人工核准</span>';
     badges += dependsOnBadge(tk);
     return (
@@ -316,7 +408,7 @@
       '<span class="lane-gauge tabular' + (over ? " is-over" : "") + '">' + gauge + "</span>" +
       "</div></div>" +
       '<div class="lane-body" data-lane-body="' + stage.id + '">' + body +
-      '<button type="button" class="lane-add-btn" data-add-to="' + stage.id + '">+ 新增卡片</button>' +
+      (ACTIVE_PROJECT === "__all__" ? "" : '<button type="button" class="lane-add-btn" data-add-to="' + stage.id + '">+ 新增卡片</button>') +
       "</div></div>"
     );
   }
@@ -391,10 +483,10 @@
       ? EPICS.map(epicCardHtml).join("")
       : '<p class="no-tasks">尚無 Epic。開始新專案時，先跟 Claude／Codex 說明這個專案要做什麼，' +
         '走一遍 spec-interrogation → implementation-plan 流程，把功能模組（Epic）、用戶需求（User Story）' +
-        '寫進 <span class="mono">tools/kanban/epics.json</span>，任務卡再透過看板分頁的「+ 新增卡片」建立並指定 Epic / User Story。</p>';
+        '建立 Epic 後，任務卡會在這裡顯示進度。</p>';
   }
 
-  function renderAll() { renderLanes(); renderRoadmap(); }
+  function renderAll() { renderProjectControls(); renderLanes(); renderRoadmap(); }
 
   function switchView(v) {
     currentView = v;
@@ -549,6 +641,38 @@
   });
 
   document.addEventListener("click", function (e) {
+    if (e.target.id === "project-add-toggle") {
+      document.getElementById("project-form").hidden = false;
+      document.getElementById("project-name").focus();
+      return;
+    }
+    if (e.target.id === "project-cancel") {
+      document.getElementById("project-form").hidden = true;
+      return;
+    }
+    if (e.target.id === "project-create") {
+      var name = document.getElementById("project-name").value.trim();
+      var id = document.getElementById("project-id").value.trim().toLowerCase();
+      var prefix = document.getElementById("project-prefix").value.trim().toUpperCase();
+      if (!name || !id || !prefix) { showToast("請填寫名稱、id 與 prefix", true); return; }
+      api("/api/projects", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, name: name, prefix: prefix })
+      }).then(function (project) {
+        PROJECTS.push(project);
+        ACTIVE_PROJECT = project.id;
+        try { sessionStorage.setItem("monstrare-project", ACTIVE_PROJECT); } catch (_) {}
+        document.getElementById("project-form").hidden = true;
+        return loadProjectData();
+      }).then(function () { renderAll(); showToast("專案已建立"); })
+        .catch(function (err) { showToast("建立失敗：" + err.message, true); });
+      return;
+    }
+    if (e.target.id === "token-apply") {
+      API_TOKEN = document.getElementById("token-input").value.trim();
+      try { sessionStorage.setItem("monstrare-token", API_TOKEN); } catch (_) {}
+      showToast(API_TOKEN ? "Token 已套用" : "Token 已清除");
+      return;
+    }
     if (e.target.closest(".ticket-card")) { openModal(e.target.closest(".ticket-card").dataset.id); return; }
 
     var taskRow = e.target.closest(".task-row[data-open]");
@@ -600,7 +724,8 @@
     if (e.target.id === "delete-card" && openId) {
       if (!window.confirm("確定要刪除 " + openId + " 嗎？此動作無法復原。")) return;
       var idToDelete = openId;
-      deleteCard(idToDelete).then(function () {
+      var ticketToDelete = getTicket(idToDelete);
+      deleteCard(ticketToDelete).then(function () {
         TICKETS = TICKETS.filter(function (x) { return x.id !== idToDelete; });
         closeModal();
         renderAll();
@@ -621,6 +746,13 @@
 
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !document.getElementById("modal-overlay").hidden) closeModal();
+    if (e.key === "Enter" && e.target.id === "token-input") document.getElementById("token-apply").click();
+  });
+
+  document.getElementById("project-select").addEventListener("change", function (e) {
+    ACTIVE_PROJECT = e.target.value;
+    try { sessionStorage.setItem("monstrare-project", ACTIVE_PROJECT); } catch (_) {}
+    loadProjectData().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });
   });
 
   loadAll().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });

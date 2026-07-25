@@ -69,10 +69,12 @@ Zeabur、資料放 persistent volume」。
 - `dependsOn` 硬防呆（格式 / 自我依賴 / 存在性 / 循環 / 推進阻擋）沿用原版，
   但存在性與循環偵測**限縮在同一專案內**（跨專案依賴 v1 不支援）。
 
-## 前端（後續，不在本次 TDD 範圍）
+## 前端 integration
 
-- 左側 project panel：列出 `/api/projects` + 一個「全部」聚合項；點選切換看板資料來源。
-- panel 底部「+ 新增專案」→ `POST /api/projects`。
+- topbar project selector 列出 `/api/projects` +「全部專案」；單一專案讀 scoped cards/epics，全部視圖讀 aggregate cards 並聚合各專案 epics。
+- `＋` 展開 compact project form，透過 `POST /api/projects` 建立專案。
+- 所有 card 寫入依卡片的 `project` 改送 `/api/projects/:pid/cards`；全部視圖的 bulk update 先按 project 分組。
+- `/api/config.authRequired` 為 true 時顯示 bearer token input；token 只保存在 browser `sessionStorage`，並附加到 API request。
 
 ## Migration 與向後相容
 

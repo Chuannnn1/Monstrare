@@ -6,23 +6,43 @@
  *   KANBAN_HOST      預設 127.0.0.1（部署到 Zeabur 設 0.0.0.0）
  *   KANBAN_PORT      預設 4420
  *   KANBAN_DATA_DIR  預設 server.mjs 所在目錄；放 projects.json 與 cards/
- * 資料：<DATA_DIR>/projects.json + <DATA_DIR>/cards/<projectId>/<PREFIX>-NNN.json
- *   （一卡一 JSON 檔，git tracked；每張卡帶 project 欄位）
+ *   KANBAN_AUTH_TOKEN 對外 bind 必填；保護所有寫入 API
+ *   KANBAN_MAX_BODY_BYTES 預設 1048576
+ * 資料：<DATA_DIR>/projects.json + cards/<projectId>/ + epics/<projectId>.json
+ *   （一卡一 JSON 檔；每張卡帶 project 欄位）
  */
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
 const ROOT = import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname);
 
 const HOST = process.env.KANBAN_HOST || '127.0.0.1';
-const PORT = Number(process.env.KANBAN_PORT) || 4420;
+const PORT = (() => {
+  if (process.env.KANBAN_PORT === undefined) return 4420;
+  const value = Number(process.env.KANBAN_PORT);
+  if (!Number.isInteger(value) || value < 0 || value > 65535) {
+    throw new Error('KANBAN_PORT 必須是 0 到 65535 的整數');
+  }
+  return value;
+})();
 const DATA_DIR = process.env.KANBAN_DATA_DIR || ROOT;
+const AUTH_TOKEN = process.env.KANBAN_AUTH_TOKEN || '';
+const MAX_BODY_BYTES = (() => {
+  const value = Number(process.env.KANBAN_MAX_BODY_BYTES || 1024 * 1024);
+  if (!Number.isInteger(value) || value < 1) throw new Error('KANBAN_MAX_BODY_BYTES 必須是正整數');
+  return value;
+})();
+
+if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !AUTH_TOKEN) {
+  throw new Error('非 loopback KANBAN_HOST 必須設定 KANBAN_AUTH_TOKEN');
+}
 
 const CARDS_DIR = path.join(DATA_DIR, 'cards');
 const PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
-const EPICS_JSON = path.join(DATA_DIR, 'epics.json');
+const EPICS_DIR = path.join(DATA_DIR, 'epics');
 const INDEX_HTML = path.join(ROOT, 'index.html'); // 靜態資產隨程式碼走，不在 DATA_DIR
 
 fs.mkdirSync(CARDS_DIR, { recursive: true });
@@ -64,14 +84,69 @@ function sendJson(res, code, obj) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    let size = 0;
+    let tooLarge = false;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        tooLarge = true;
+        chunks.length = 0;
+      } else if (!tooLarge) chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (tooLarge) reject(new PayloadTooLargeError());
+      else resolve(Buffer.concat(chunks).toString('utf8'));
+    });
     req.on('error', reject);
   });
 }
 
+class InvalidBodyError extends Error {}
+class PayloadTooLargeError extends Error {}
+
+function parseBody(body) {
+  try {
+    return JSON.parse(body);
+  } catch (err) {
+    throw new InvalidBodyError(err.message);
+  }
+}
+
+function hasValidBearerToken(req) {
+  if (!AUTH_TOKEN) return true;
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return false;
+  const supplied = Buffer.from(header.slice(7));
+  const expected = Buffer.from(AUTH_TOKEN);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function readJsonFile(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return fallback;
+    throw err;
+  }
+}
+
+function atomicWriteJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
+  let renamed = false;
+  try {
+    fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(temp, file);
+    renamed = true;
+  } finally {
+    if (!renamed) {
+      try { fs.unlinkSync(temp); } catch {}
+    }
+  }
 }
 
 /** 卡片驗證。prefix 為所屬專案的 id 前綴，決定 id 與 dependsOn 元素的格式。 */
@@ -159,7 +234,7 @@ function fillDefaults(c) {
   return c;
 }
 
-/** 固定 key 順序寫檔到 cards/<pid>/，2 空格縮排 + 結尾換行，減少 git diff 噪音 */
+/** 固定 key 順序寫檔到 cards/<pid>/，2 空格縮排 + 結尾換行，減少 diff 噪音 */
 function writeCard(c, pid) {
   const normalized = {
     id: c.id,
@@ -185,23 +260,19 @@ function writeCard(c, pid) {
     comments: c.comments
   };
   const dir = path.join(CARDS_DIR, pid);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, c.id + '.json'), JSON.stringify(normalized, null, 2) + '\n', 'utf8');
+  atomicWriteJson(path.join(dir, c.id + '.json'), normalized);
 }
 
 /* ── projects ── */
 
 function readProjects() {
-  try {
-    const list = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf8'));
-    return Array.isArray(list) ? list : [];
-  } catch {
-    return [];
-  }
+  const list = readJsonFile(PROJECTS_JSON, []);
+  if (!Array.isArray(list)) throw new Error('projects.json 必須是陣列');
+  return list;
 }
 
 function writeProjects(list) {
-  fs.writeFileSync(PROJECTS_JSON, JSON.stringify(list, null, 2) + '\n', 'utf8');
+  atomicWriteJson(PROJECTS_JSON, list);
 }
 
 function getProject(pid) {
@@ -214,8 +285,9 @@ function readProjectCards(project) {
   let files = [];
   try {
     files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  } catch {
-    return [];
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
   }
   const cards = files.map((f) => {
     const c = fillDefaults(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
@@ -295,18 +367,23 @@ function todayStr() {
 
 /* ── route handlers ── */
 
-function handleEpics(res) {
-  try {
-    const epics = JSON.parse(fs.readFileSync(EPICS_JSON, 'utf8'));
-    sendJson(res, 200, epics);
-  } catch (err) {
-    if (err.code === 'ENOENT') return sendJson(res, 200, { epics: [] });
-    sendJson(res, 500, { error: '讀取 epics.json 失敗：' + err.message });
+function handleEpics(res, project) {
+  const data = readJsonFile(path.join(EPICS_DIR, project.id + '.json'), { epics: [] });
+  if (!isPlainObject(data) || !Array.isArray(data.epics)) throw new Error(`${project.id} epics 必須是 { epics: [] }`);
+  sendJson(res, 200, data);
+}
+
+function handlePutEpics(res, project, body) {
+  const data = parseBody(body);
+  if (!isPlainObject(data) || !Array.isArray(data.epics)) {
+    return sendJson(res, 400, { error: 'body 必須是 { epics: [] }' });
   }
+  atomicWriteJson(path.join(EPICS_DIR, project.id + '.json'), data);
+  sendJson(res, 200, data);
 }
 
 function handleCreateProject(res, body) {
-  const input = JSON.parse(body);
+  const input = parseBody(body);
   if (!isPlainObject(input)) return sendJson(res, 400, { error: 'body 必須是 object' });
   const id = typeof input.id === 'string' ? input.id.trim() : '';
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -329,7 +406,7 @@ function handleProjectCardList(res, project) {
 }
 
 function handleCreateCard(res, project, body) {
-  const input = JSON.parse(body);
+  const input = parseBody(body);
   if (!isPlainObject(input)) return sendJson(res, 400, { error: 'body 必須是 object' });
   const existing = readProjectCards(project);
   const maxNum = existing.reduce(
@@ -372,7 +449,7 @@ function handleCreateCard(res, project, body) {
 }
 
 function handlePutOne(res, project, id, body) {
-  const c = fillDefaults(JSON.parse(body));
+  const c = fillDefaults(parseBody(body));
   if (!isPlainObject(c)) return sendJson(res, 400, { error: 'body 必須是完整 card object' });
   if (c.id !== id) return sendJson(res, 400, { error: 'body 的 id 與 URL 不一致' });
   c.project = project.id; // URL 為權威來源
@@ -387,7 +464,7 @@ function handlePutOne(res, project, id, body) {
 }
 
 function handlePutBulk(res, project, body) {
-  const list = JSON.parse(body);
+  const list = parseBody(body);
   if (!Array.isArray(list)) return sendJson(res, 400, { error: 'body 必須是 card 陣列' });
   for (const c of list) {
     if (isPlainObject(c)) c.project = project.id;
@@ -423,13 +500,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/config') {
-      if (req.method === 'GET') return sendJson(res, 200, { owner: DEFAULT_OWNER });
+      if (req.method === 'GET') return sendJson(res, 200, { owner: DEFAULT_OWNER, authRequired: !!AUTH_TOKEN });
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 
     if (pathname === '/api/epics') {
-      if (req.method === 'GET') return handleEpics(res);
+      if (req.method === 'GET') return sendJson(res, 410, { error: '請改用 /api/projects/:pid/epics' });
       return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    if (pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !hasValidBearerToken(req)) {
+      res.setHeader('WWW-Authenticate', 'Bearer');
+      return sendJson(res, 401, { error: '需要有效的 bearer token' });
     }
 
     // 跨專案聚合視圖（唯讀）：每張卡帶 project 欄位
@@ -442,6 +524,16 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/projects') {
       if (req.method === 'GET') return sendJson(res, 200, readProjects());
       if (req.method === 'POST') return handleCreateProject(res, await readBody(req));
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const em = pathname.match(/^\/api\/projects\/([^/]+)\/epics$/);
+    if (em) {
+      const pid = decodeURIComponent(em[1]);
+      const project = getProject(pid);
+      if (!project) return sendJson(res, 404, { error: '專案不存在：' + pid });
+      if (req.method === 'GET') return handleEpics(res, project);
+      if (req.method === 'PUT') return handlePutEpics(res, project, await readBody(req));
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 
@@ -470,10 +562,12 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { error: 'not found' });
   } catch (err) {
-    if (err instanceof SyntaxError) {
+    if (err instanceof InvalidBodyError) {
       sendJson(res, 400, { error: 'body 不是合法 JSON：' + err.message });
+    } else if (err instanceof PayloadTooLargeError) {
+      sendJson(res, 413, { error: `request body 超過 ${MAX_BODY_BYTES} bytes` });
     } else {
-      sendJson(res, 500, { error: '寫入失敗：' + err.message });
+      sendJson(res, 500, { error: 'request 失敗：' + err.message });
     }
   }
 });
@@ -488,6 +582,8 @@ server.on('error', (err) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[kanban] 治理看板 → http://${HOST}:${PORT}`);
+  const address = server.address();
+  const actualPort = typeof address === 'object' && address ? address.port : PORT;
+  console.log(`[kanban] 治理看板 → http://${HOST}:${actualPort}`);
   console.log(`[kanban] 資料目錄：${DATA_DIR}`);
 });

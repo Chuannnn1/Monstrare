@@ -1,4 +1,4 @@
-# 跨專案看板設計（cross-project）v1
+# 跨專案看板設計（cross-project）v2
 
 ## 動機
 
@@ -21,6 +21,16 @@ Zeabur、資料放 persistent volume」。
 - 卡片：`<DATA_DIR>/cards/<projectId>/<PREFIX>-NNN.json`
   - 每張卡新增 `project` 欄位（= projectId），供跨專案聚合視圖使用
   - 流水號**每個專案獨立**：golem 有 `GOLEM-001`、nekosub 有 `NEKO-001`，互不影響
+- Epics：`<DATA_DIR>/epics/<projectId>.json`
+  - 格式 `{ "epics": [] }`；不存在時回空陣列
+  - 不再共用全域 `epics.json`
+
+### Persistence contract
+
+- Zeabur 的 `KANBAN_DATA_DIR` 必須指向 persistent volume；container image filesystem 不可作為資料層。
+- `projects.json`、cards、epics 全部採「同目錄 temp file + atomic rename」寫入，避免 process restart 留下半份 JSON。
+- 只有 `ENOENT` 視為空資料；JSON 損壞或權限錯誤回 500，禁止把損壞資料當空清單覆寫。
+- v2 file store 僅支援**單一 server replica**。多 replica / 高併發若成為需求，應升級 SQLite/PostgreSQL，不能靠共享 JSON 猜測一致性。
 
 ## 環境變數（同時服務「可測試」與「可部署」）
 
@@ -29,6 +39,11 @@ Zeabur、資料放 persistent volume」。
 | `KANBAN_HOST` | `127.0.0.1` | 部署到 Zeabur 時設 `0.0.0.0` |
 | `KANBAN_PORT` | `4420` | 部署 / 測試用隨機埠 |
 | `KANBAN_DATA_DIR` | server.mjs 所在目錄 | 放 `projects.json` 與 `cards/`；Zeabur 指向 volume |
+| `KANBAN_AUTH_TOKEN` | 空 | Bearer token；非 loopback bind 時必填 |
+| `KANBAN_MAX_BODY_BYTES` | `1048576` | request body 上限，超過回 413 |
+
+非 `127.0.0.1` / `localhost` / `::1` 的 bind 若未設定 `KANBAN_AUTH_TOKEN`，server 直接拒絕啟動。
+所有 POST / PUT / PATCH / DELETE API 都要求 `Authorization: Bearer <token>`；GET 維持唯讀公開，部署層仍應使用 HTTPS 與存取控制。
 
 ## API 契約
 
@@ -38,9 +53,14 @@ Zeabur、資料放 persistent volume」。
 | `POST` | `/api/projects` | 新增專案 `{id,name,prefix}`；建立 `cards/<id>/`；id 重複回 400 |
 | `GET` | `/api/projects/:pid/cards` | 該專案全部卡片 |
 | `POST` | `/api/projects/:pid/cards` | 新增卡，id = `<PREFIX>-NNN`，`project` = pid，回 201 |
+| `PUT` | `/api/projects/:pid/cards` | 批次覆寫該專案指定卡片 |
 | `PUT` | `/api/projects/:pid/cards/:id` | 覆寫單卡 |
 | `DELETE` | `/api/projects/:pid/cards/:id` | 刪卡 |
+| `GET` | `/api/projects/:pid/epics` | 讀取該專案 epics |
+| `PUT` | `/api/projects/:pid/epics` | 寫入 `{epics: []}` |
 | `GET` | `/api/cards` | 跨專案聚合，每張卡都帶 `project` 欄位（左側 panel 的「全部」視圖用） |
+
+舊 `GET /api/epics` 回 410，前端必須切到 project-scoped endpoint。
 
 ### 驗證規則（沿用並擴充原版）
 
@@ -54,12 +74,20 @@ Zeabur、資料放 persistent volume」。
 - 左側 project panel：列出 `/api/projects` + 一個「全部」聚合項；點選切換看板資料來源。
 - panel 底部「+ 新增專案」→ `POST /api/projects`。
 
-## 向後相容
+## Migration 與向後相容
 
-v1 不保留舊的攤平式 `/api/cards` 寫入路徑；既有單專案資料以一次性 migration
-（把 `cards/*.json` 移進 `cards/default/` 並補 `project:"default"`）處理，另立任務卡。
+不保留舊的攤平式 `/api/cards` 寫入路徑。一次性工具預設只 dry-run：
 
-## 測試範圍（本次：TDD red）
+```powershell
+npm run kanban:migrate -- --map infra=monstrare
+npm run kanban:migrate -- --map infra=monstrare --apply
+```
 
-先寫失敗測試鎖定上述契約，全部針對 server 黑箱（`node:test` 內建、零依賴），
-用 `KANBAN_PORT` + `KANBAN_DATA_DIR` 起隔離實例。實作後轉綠。
+- seed `golem / openclaw / nekosub / monstrare` 四個初始專案。
+- 已知 `epic` 與 project id 相同時自動歸類；無法判定者必須用 `--map SOURCE=PROJECT`，不猜測。
+- `TASK-NNN` 依專案 prefix 重映射，並同步改寫同專案 `dependsOn`。
+- `--apply` 只建立新結構，**保留舊 flat source**；重跑內容相同則安全略過，內容衝突則停止。
+
+## 驗證範圍
+
+全部採 `node:test` 黑箱測試、零 runtime dependency。每個 case 使用 OS 配發的 ephemeral port 與獨立 temp data directory，涵蓋跨專案 CRUD、corrupt-data fail closed、atomic persistence、migration dry-run/apply/idempotency、bearer auth、body limit、external bind fail closed 與 project-scoped epics。Windows 與 WSL Linux 都是 release gate。

@@ -46,6 +46,11 @@ const PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
 const EPICS_DIR = path.join(DATA_DIR, 'epics');
 const BLUEPRINTS_DIR = path.join(DATA_DIR, 'blueprints');
 const INDEX_HTML = path.join(ROOT, 'index.html'); // 靜態資產隨程式碼走，不在 DATA_DIR
+const PUBLIC_DIR = path.join(ROOT, 'public');
+const EXCALIDRAW_ASSETS_DIR = path.resolve(
+  ROOT,
+  '../../node_modules/@excalidraw/excalidraw/dist/excalidraw-assets',
+);
 
 fs.mkdirSync(CARDS_DIR, { recursive: true });
 fs.mkdirSync(BLUEPRINTS_DIR, { recursive: true });
@@ -97,6 +102,48 @@ function sendJson(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
+}
+
+function staticContentType(file) {
+  const ext = path.extname(file).toLowerCase();
+  return {
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.map': 'application/json; charset=utf-8',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+  }[ext] || 'application/octet-stream';
+}
+
+function sendStaticFile(req, res, root, relativePath, cacheControl = 'public, max-age=3600') {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(relativePath);
+  } catch {
+    throw new ApiError(400, 'asset path 格式不合法');
+  }
+  if (!decoded || decoded.includes('\0') || decoded.split('/').includes('..')) {
+    throw new ApiError(400, 'asset path 格式不合法');
+  }
+  const file = path.resolve(root, decoded);
+  const rootPrefix = path.resolve(root) + path.sep;
+  if (!file.startsWith(rootPrefix)) throw new ApiError(400, 'asset path 格式不合法');
+  let stat;
+  try {
+    stat = fs.statSync(file);
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new ApiError(404, 'asset 不存在');
+    throw err;
+  }
+  if (!stat.isFile()) throw new ApiError(404, 'asset 不存在');
+  res.writeHead(200, {
+    'Content-Type': staticContentType(file),
+    'Content-Length': stat.size,
+    'Cache-Control': cacheControl,
+  });
+  if (req.method === 'HEAD') res.end();
+  else fs.createReadStream(file).pipe(res);
 }
 
 function readBody(req) {
@@ -632,8 +679,7 @@ function handleCreateBlueprint(res, project, body) {
   sendJson(res, 201, document);
 }
 
-function handleBlueprintOperations(res, project, blueprintId, body) {
-  const input = parseBody(body);
+function commitBlueprintOperations(project, blueprintId, input) {
   if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
   const current = readBlueprint(project, blueprintId);
   if (!current) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
@@ -679,7 +725,180 @@ function handleBlueprintOperations(res, project, blueprintId, body) {
   atomicWriteJson(blueprintFile(project, blueprintId), next);
   const event = publicBlueprintEvent(storedEvent);
   broadcastBlueprintEvent(project, blueprintId, event);
-  sendJson(res, 200, { document: next, event });
+  return { document: next, event };
+}
+
+function handleBlueprintOperations(res, project, blueprintId, body) {
+  const input = parseBody(body);
+  sendJson(res, 200, commitBlueprintOperations(project, blueprintId, input));
+}
+
+function blueprintDiscussionsFile(project, blueprintId) {
+  return path.join(blueprintDir(project, blueprintId), 'discussions.json');
+}
+
+function readBlueprintDiscussions(project, blueprintId) {
+  const list = readJsonFile(blueprintDiscussionsFile(project, blueprintId), []);
+  if (!Array.isArray(list)) throw new Error('discussions.json 必須是陣列');
+  return list;
+}
+
+function handleCreateBlueprintDiscussion(res, project, blueprintId, body) {
+  if (!readBlueprint(project, blueprintId)) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+  const input = parseBody(body);
+  if (!isPlainObject(input) || !isPlainObject(input.author)) throw new ApiError(400, 'author 必須是 object');
+  if (!['agent', 'human'].includes(input.author.type) || typeof input.author.id !== 'string' || !ENTITY_ID_RE.test(input.author.id)) {
+    throw new ApiError(400, 'author 必須包含有效的 type/id');
+  }
+  if (typeof input.text !== 'string' || !input.text.trim()) throw new ApiError(400, 'text 必須是非空字串');
+  const nodeIds = validateStringArray(input.nodeIds, 'nodeIds');
+  const document = readBlueprint(project, blueprintId);
+  const missing = nodeIds.filter((id) => !document.nodes.some((node) => node.id === id));
+  if (missing.length) throw new ApiError(400, 'nodeIds 不存在：' + missing.join(', '));
+  const message = {
+    id: 'msg-' + randomUUID(),
+    author: {
+      type: input.author.type,
+      id: input.author.id,
+      ...(typeof input.author.model === 'string' && input.author.model ? { model: input.author.model } : {}),
+    },
+    nodeIds,
+    text: input.text.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  const discussions = readBlueprintDiscussions(project, blueprintId);
+  discussions.push(message);
+  atomicWriteJson(blueprintDiscussionsFile(project, blueprintId), discussions);
+  sendJson(res, 201, message);
+}
+
+function blueprintProposalsDir(project, blueprintId) {
+  return path.join(blueprintDir(project, blueprintId), 'proposals');
+}
+
+function blueprintProposalFile(project, blueprintId, proposalId) {
+  return path.join(blueprintProposalsDir(project, blueprintId), proposalId + '.json');
+}
+
+function readBlueprintProposals(project, blueprintId) {
+  const dir = blueprintProposalsDir(project, blueprintId);
+  let files;
+  try {
+    files = fs.readdirSync(dir).filter((file) => file.endsWith('.json')).sort();
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  return files.map((file) => readJsonFile(path.join(dir, file), null)).filter(Boolean);
+}
+
+function handleCreateBlueprintProposal(res, project, blueprintId, body) {
+  const current = readBlueprint(project, blueprintId);
+  if (!current) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  if (typeof input.id !== 'string' || !ENTITY_ID_RE.test(input.id)) throw new ApiError(400, 'proposal id 格式不合法');
+  if (fs.existsSync(blueprintProposalFile(project, blueprintId, input.id))) {
+    throw new ApiError(409, 'proposal 已存在：' + input.id);
+  }
+  if (input.baseRevision !== current.revision) {
+    throw new ApiError(409, 'baseRevision 已過期', { currentRevision: current.revision });
+  }
+  if (!isPlainObject(input.actor) || input.actor.type !== 'agent' || typeof input.actor.id !== 'string' || !ENTITY_ID_RE.test(input.actor.id)) {
+    throw new ApiError(400, 'proposal actor 必須是有效 agent');
+  }
+  if (!Array.isArray(input.operations) || input.operations.length < 1 || input.operations.length > 50) {
+    throw new ApiError(400, 'operations 必須包含 1..50 個操作');
+  }
+  const preview = structuredClone(current);
+  for (const operation of input.operations) applyBlueprintOperation(preview, operation, input.actor.id);
+  const proposal = {
+    id: input.id,
+    project: project.id,
+    blueprintId,
+    baseRevision: input.baseRevision,
+    actor: input.actor,
+    message: typeof input.message === 'string' ? input.message : '',
+    operations: input.operations,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    resolvedAt: null,
+    resolvedBy: null,
+  };
+  atomicWriteJson(blueprintProposalFile(project, blueprintId, proposal.id), proposal);
+  sendJson(res, 201, proposal);
+}
+
+function handleResolveBlueprintProposal(res, project, blueprintId, proposalId, resolution, body) {
+  const file = blueprintProposalFile(project, blueprintId, proposalId);
+  const proposal = readJsonFile(file, null);
+  if (!proposal) throw new ApiError(404, 'proposal 不存在：' + proposalId);
+  if (proposal.status !== 'pending') throw new ApiError(409, 'proposal 已處理：' + proposal.status);
+  const input = parseBody(body);
+  if (
+    !isPlainObject(input) ||
+    !isPlainObject(input.actor) ||
+    input.actor.type !== 'human' ||
+    typeof input.actor.id !== 'string' ||
+    !ENTITY_ID_RE.test(input.actor.id)
+  ) {
+    throw new ApiError(400, 'resolution actor 必須是有效 human');
+  }
+  let result = null;
+  if (resolution === 'accepted') {
+    result = commitBlueprintOperations(project, blueprintId, {
+      baseRevision: proposal.baseRevision,
+      actor: proposal.actor,
+      message: proposal.message,
+      operations: proposal.operations,
+    });
+  }
+  proposal.status = resolution;
+  proposal.resolvedAt = new Date().toISOString();
+  proposal.resolvedBy = input.actor;
+  atomicWriteJson(file, proposal);
+  sendJson(res, 200, { proposal, ...(result || {}) });
+}
+
+function handleMaterializeBlueprintTasks(res, project, blueprintId, body) {
+  const document = readBlueprint(project, blueprintId);
+  if (!document) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+  const input = parseBody(body);
+  if (!isPlainObject(input) || !isPlainObject(input.actor)) throw new ApiError(400, 'body/actor 格式不合法');
+  if (!['agent', 'human'].includes(input.actor.type) || typeof input.actor.id !== 'string' || !ENTITY_ID_RE.test(input.actor.id)) {
+    throw new ApiError(400, 'actor 格式不合法');
+  }
+  const nodeIds = validateStringArray(input.nodeIds, 'nodeIds');
+  if (!nodeIds.length || nodeIds.length > 20) throw new ApiError(400, 'nodeIds 必須包含 1..20 項');
+  const nodes = nodeIds.map((id) => document.nodes.find((node) => node.id === id));
+  if (nodes.some((node) => !node || node.archived || !['task', 'experiment'].includes(node.type))) {
+    throw new ApiError(400, '只能 materialize 未封存的 task/experiment nodes');
+  }
+  if (nodes.some((node) => node.linkedCardIds.length)) {
+    throw new ApiError(409, '至少一個 node 已連結 Kanban card');
+  }
+  const cards = nodes.map((node) => createCardRecord(project, {
+    title: node.title,
+    content: node.body,
+    stage: 'backlog',
+    risk: node.type === 'experiment' ? 'medium' : 'low',
+    owner: typeof input.owner === 'string' ? input.owner : DEFAULT_OWNER,
+    agent: typeof input.agent === 'string' ? input.agent : '',
+    epic: document.title,
+    refs: node.refs,
+  }));
+  const operations = nodes.map((node, index) => ({
+    type: 'patchNode',
+    nodeId: node.id,
+    changes: { linkedCardIds: [...node.linkedCardIds, cards[index].id] },
+  }));
+  const committed = commitBlueprintOperations(project, blueprintId, {
+    baseRevision: document.revision,
+    actor: input.actor,
+    message: 'Materialize task nodes to Kanban',
+    operations,
+  });
+  sendJson(res, 201, { cards, document: committed.document, event: committed.event });
 }
 
 function handleBlueprintEvents(req, res, project, blueprintId, searchParams) {
@@ -752,9 +971,8 @@ function handleProjectCardList(res, project) {
   sendJson(res, 200, readProjectCards(project));
 }
 
-function handleCreateCard(res, project, body) {
-  const input = parseBody(body);
-  if (!isPlainObject(input)) return sendJson(res, 400, { error: 'body 必須是 object' });
+function createCardRecord(project, input) {
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
   const existing = readProjectCards(project);
   const maxNum = existing.reduce(
     (m, c) => Math.max(m, parseInt(c.id.slice(project.prefix.length + 1), 10) || 0),
@@ -786,12 +1004,19 @@ function handleCreateCard(res, project, body) {
     comments: []
   });
   const err = validateCard(card, project.prefix);
-  if (err) return sendJson(res, 400, { error: err });
+  if (err) throw new ApiError(400, err);
   const cardMap = new Map(existing.map((x) => [x.id, x]));
   cardMap.set(card.id, card);
   const depErr = checkDependsOn(card, cardMap);
-  if (depErr) return sendJson(res, 400, { error: depErr });
+  if (depErr) throw new ApiError(400, depErr);
   writeCard(card, project.id);
+  return card;
+}
+
+function handleCreateCard(res, project, body) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) return sendJson(res, 400, { error: 'body 必須是 object' });
+  const card = createCardRecord(project, input);
   sendJson(res, 201, card);
 }
 
@@ -828,6 +1053,23 @@ function handlePutBulk(res, project, body) {
   sendJson(res, 200, { updated: list.length });
 }
 
+function handleClaimCard(res, project, id, body) {
+  const input = parseBody(body);
+  if (!isPlainObject(input) || typeof input.agent !== 'string' || !input.agent.trim()) {
+    throw new ApiError(400, 'agent 必須是非空字串');
+  }
+  const agent = input.agent.trim();
+  if (agent.length > 100) throw new ApiError(400, 'agent 最多 100 字元');
+  const card = readProjectCards(project).find((item) => item.id === id);
+  if (!card) throw new ApiError(404, id + ' 不存在');
+  if (card.agent && card.agent !== agent) {
+    throw new ApiError(409, id + ' 已被其他 agent 認領', { claimedBy: card.agent });
+  }
+  card.agent = agent;
+  writeCard(card, project.id);
+  sendJson(res, 200, card);
+}
+
 function handleDelete(res, project, id) {
   const file = path.join(CARDS_DIR, project.id, id + '.json');
   if (!fs.existsSync(file)) return sendJson(res, 404, { error: id + ' 不存在' });
@@ -845,6 +1087,25 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(fs.readFileSync(INDEX_HTML));
       return;
+    }
+
+    if (['GET', 'HEAD'].includes(req.method) && pathname.startsWith('/kanban-assets/app/')) {
+      return sendStaticFile(
+        req,
+        res,
+        PUBLIC_DIR,
+        pathname.slice('/kanban-assets/app/'.length),
+        'no-cache',
+      );
+    }
+
+    if (['GET', 'HEAD'].includes(req.method) && pathname.startsWith('/kanban-assets/excalidraw/')) {
+      return sendStaticFile(
+        req,
+        res,
+        EXCALIDRAW_ASSETS_DIR,
+        pathname.slice('/kanban-assets/excalidraw/'.length),
+      );
     }
 
     if (pathname === '/api/config') {
@@ -872,6 +1133,80 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/projects') {
       if (req.method === 'GET') return sendJson(res, 200, readProjects());
       if (req.method === 'POST') return handleCreateProject(res, await readBody(req));
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const blueprintDiscussionMatch = pathname.match(
+      /^\/api\/projects\/([^/]+)\/blueprints\/([^/]+)\/discussions$/
+    );
+    if (blueprintDiscussionMatch) {
+      const pid = decodeURIComponent(blueprintDiscussionMatch[1]);
+      const blueprintId = decodeURIComponent(blueprintDiscussionMatch[2]);
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      if (!BLUEPRINT_ID_RE.test(blueprintId)) throw new ApiError(400, 'blueprint id 格式不合法');
+      if (!readBlueprint(project, blueprintId)) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+      if (req.method === 'GET') return sendJson(res, 200, readBlueprintDiscussions(project, blueprintId));
+      if (req.method === 'POST') {
+        return handleCreateBlueprintDiscussion(res, project, blueprintId, await readBody(req));
+      }
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const blueprintProposalResolutionMatch = pathname.match(
+      /^\/api\/projects\/([^/]+)\/blueprints\/([^/]+)\/proposals\/([^/]+)\/(accept|reject)$/
+    );
+    if (blueprintProposalResolutionMatch) {
+      const pid = decodeURIComponent(blueprintProposalResolutionMatch[1]);
+      const blueprintId = decodeURIComponent(blueprintProposalResolutionMatch[2]);
+      const proposalId = decodeURIComponent(blueprintProposalResolutionMatch[3]);
+      const action = blueprintProposalResolutionMatch[4];
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      if (!BLUEPRINT_ID_RE.test(blueprintId)) throw new ApiError(400, 'blueprint id 格式不合法');
+      if (!ENTITY_ID_RE.test(proposalId)) throw new ApiError(400, 'proposal id 格式不合法');
+      if (req.method === 'POST') {
+        return handleResolveBlueprintProposal(
+          res,
+          project,
+          blueprintId,
+          proposalId,
+          action === 'accept' ? 'accepted' : 'rejected',
+          await readBody(req),
+        );
+      }
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const blueprintProposalMatch = pathname.match(
+      /^\/api\/projects\/([^/]+)\/blueprints\/([^/]+)\/proposals$/
+    );
+    if (blueprintProposalMatch) {
+      const pid = decodeURIComponent(blueprintProposalMatch[1]);
+      const blueprintId = decodeURIComponent(blueprintProposalMatch[2]);
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      if (!BLUEPRINT_ID_RE.test(blueprintId)) throw new ApiError(400, 'blueprint id 格式不合法');
+      if (!readBlueprint(project, blueprintId)) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+      if (req.method === 'GET') return sendJson(res, 200, readBlueprintProposals(project, blueprintId));
+      if (req.method === 'POST') {
+        return handleCreateBlueprintProposal(res, project, blueprintId, await readBody(req));
+      }
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const blueprintMaterializeMatch = pathname.match(
+      /^\/api\/projects\/([^/]+)\/blueprints\/([^/]+)\/materialize$/
+    );
+    if (blueprintMaterializeMatch) {
+      const pid = decodeURIComponent(blueprintMaterializeMatch[1]);
+      const blueprintId = decodeURIComponent(blueprintMaterializeMatch[2]);
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      if (!BLUEPRINT_ID_RE.test(blueprintId)) throw new ApiError(400, 'blueprint id 格式不合法');
+      if (req.method === 'POST') {
+        return handleMaterializeBlueprintTasks(res, project, blueprintId, await readBody(req));
+      }
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 
@@ -917,6 +1252,19 @@ const server = http.createServer(async (req, res) => {
       if (!project) return sendJson(res, 404, { error: '專案不存在：' + pid });
       if (req.method === 'GET') return handleEpics(res, project);
       if (req.method === 'PUT') return handlePutEpics(res, project, await readBody(req));
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const claimMatch = pathname.match(/^\/api\/projects\/([^/]+)\/cards\/([^/]+)\/claim$/);
+    if (claimMatch) {
+      const pid = decodeURIComponent(claimMatch[1]);
+      const cardId = decodeURIComponent(claimMatch[2]);
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      if (!cardIdRe(project.prefix).test(cardId)) {
+        throw new ApiError(400, 'id 必須符合 ^' + project.prefix + '-\\d{3,}$');
+      }
+      if (req.method === 'POST') return handleClaimCard(res, project, cardId, await readBody(req));
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 

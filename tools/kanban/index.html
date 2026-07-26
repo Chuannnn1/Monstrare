@@ -1,4 +1,10 @@
-<title>專案管理平台</title>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Monstrare</title>
 <style>
   :root {
     --paper: #090b0e;
@@ -23,7 +29,7 @@
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(66, 199, 213, 0.2);
     --shadow-modal: 0 28px 80px rgba(0, 0, 0, 0.62);
-    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    --font-ui: "Segoe UI Variable Text", "Aptos", "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
 
@@ -40,7 +46,7 @@
   .app-shell { min-height: 100vh; display: grid; grid-template-columns: 236px minmax(0, 1fr); }
   .workspace { min-width: 0; }
 
-  h1, h2, h3 { text-wrap: balance; font-weight: 650; }
+  h1, h2, h3 { text-wrap: balance; font-weight: 700; }
   button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
   button { cursor: pointer; }
   button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
@@ -54,25 +60,26 @@
   /* ── Top chrome ── */
   .sidebar { position: sticky; top: 0; height: 100vh; z-index: 30; display: flex; flex-direction: column; background: #0d1014; border-right: 1px solid var(--line); overflow: hidden; }
   .sidebar-brand { padding: 20px 16px 18px; border-bottom: 1px solid var(--line); }
-  .brand-name { display: block; font-size: 16px; font-weight: 720; letter-spacing: 0; }
-  .brand-sub { display: block; margin-top: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0; }
+  .brand-name { display: block; font-size: 16px; font-weight: 700; letter-spacing: 0; }
+  .brand-sub { display: block; margin-top: 4px; font-size: 11px; color: var(--accent); letter-spacing: 0; }
   .sidebar-section-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 12px 8px 16px; }
-  .sidebar-label { font-size: 10px; font-weight: 750; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0; }
+  .sidebar-label { font-size: 11px; font-weight: 700; color: var(--ink-faint); letter-spacing: 0; }
   .project-nav { flex: 1; padding: 0 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
   .project-nav-item { width: 100%; min-height: 42px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink-dim); display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 9px; padding: 5px 8px; text-align: left; }
   .project-nav-item:hover { color: var(--ink); background: var(--surface-raised); }
   .project-nav-item.is-active { color: var(--ink); border-color: #28525a; background: var(--accent-soft); }
-  .project-mark { width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 5px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 9px; font-weight: 750; color: var(--accent); background: var(--surface-sunken); }
+  .project-mark { width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 4px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--accent); background: var(--surface-sunken); }
   .project-nav-item.is-active .project-mark { border-color: var(--accent); box-shadow: 0 0 12px rgba(66, 199, 213, 0.18); }
   .project-nav-copy { min-width: 0; }
-  .project-nav-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 650; }
-  .project-nav-prefix { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-faint); }
+  .project-nav-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+  .project-nav-prefix { display: block; margin-top: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
   .sidebar-footer { margin-top: auto; padding: 12px; border-top: 1px solid var(--line); }
   .project-status { display: block; color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; margin-bottom: 9px; }
   .project-form { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin: 4px 8px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-sunken); }
   .project-form input, .auth-control input { width: 100%; height: 32px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); padding: 0 9px; }
   .project-form .prefix-input { text-transform: uppercase; }
-  .toolbar-btn { height: 34px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); padding: 0 11px; font-weight: 650; color: var(--ink-dim); }
+  .toolbar-btn { height: 36px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); padding: 0 12px; font-weight: 600; color: var(--ink-dim); }
+  .toolbar-btn:disabled { opacity: 0.42; cursor: not-allowed; }
   .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
   .toolbar-btn.primary { border-color: var(--accent); background: var(--accent); color: #071013; }
   .toolbar-btn.icon-btn { width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; }
@@ -82,18 +89,18 @@
   .topbar { position: sticky; top: 0; z-index: 20; background: rgba(17, 21, 26, 0.96); border-bottom: 1px solid var(--line); }
   .topbar-row1 { min-height: 66px; display: flex; align-items: center; justify-content: space-between; padding: 10px 22px; gap: 16px; }
   .active-context { min-width: 0; }
-  .active-project-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .active-project-name { font-size: 16px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .active-project-meta { margin-top: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
 
   .view-tabs { display: flex; gap: 3px; background: var(--surface-sunken); border: 1px solid var(--line); border-radius: 7px; padding: 3px; }
-  .view-tabs button { border: none; background: transparent; color: var(--ink-dim); font-size: 12px; font-weight: 650; padding: 7px 13px; border-radius: 5px; transition: background-color .15s ease, color .15s ease; }
+  .view-tabs button { border: none; background: transparent; color: var(--ink-dim); font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 4px; transition: background-color .15s ease, color .15s ease; }
   .view-tabs button:hover { color: var(--ink); }
   .view-tabs button.is-active { background: var(--surface-raised); color: var(--accent); box-shadow: inset 0 0 0 1px var(--line-strong); }
   .view { display: none; }
   .view.is-active { display: block; }
 
   /* ── pills ── */
-  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
   .risk-low { background: var(--muted-soft); color: var(--muted); }
   .risk-medium { background: var(--warn-soft); color: var(--warn); }
   .risk-high { background: var(--crit-soft); color: var(--crit); }
@@ -110,34 +117,34 @@
   /* ── card ── */
   .ticket-card {
     position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-    padding: 10px 12px 10px 14px; box-shadow: var(--shadow-card); cursor: grab;
+    padding: 14px 15px 13px 17px; box-shadow: var(--shadow-card); cursor: grab;
     transition: box-shadow .15s ease, transform .15s ease, opacity .15s ease;
   }
   .ticket-card::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; }
   .ticket-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
   .ticket-card.is-dragging { opacity: 0.4; }
-  .ticket-id { font-size: 10.5px; color: var(--ink-faint); font-weight: 600; letter-spacing: 0.02em; }
-  .ticket-title { font-size: 13px; font-weight: 600; line-height: 1.35; margin: 3px 0 8px; }
+  .ticket-id { font-size: 10px; color: var(--ink-faint); font-weight: 600; letter-spacing: 0; }
+  .ticket-title { font-size: 14px; font-weight: 600; line-height: 1.5; margin: 4px 0 12px; }
   .ticket-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
-  .ticket-meta-row { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: var(--ink-faint); }
+  .ticket-meta-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ink-faint); }
 
   @media (prefers-reduced-motion: reduce) { .ticket-card, .modal, .modal-overlay { transition: none !important; } }
 
   /* ── lanes ── */
-  .lanes { display: flex; gap: 1px; background: var(--line); overflow-x: auto; scroll-snap-type: x proximity; border-top: 1px solid var(--line); }
-  .lane { flex: 0 0 232px; scroll-snap-align: start; background: var(--paper); min-height: calc(100vh - 67px); display: flex; flex-direction: column; }
+  .lanes { display: flex; gap: 10px; padding: 12px; background: var(--paper); overflow-x: auto; scroll-snap-type: x proximity; }
+  .lane { flex: 0 0 282px; scroll-snap-align: start; background: #0c0f13; border: 1px solid var(--line); min-height: calc(100vh - 91px); display: flex; flex-direction: column; }
   .lane.is-drag-over { background: var(--accent-soft); }
-  .lane-head { position: sticky; top: 0; padding: 12px 12px 10px; border-bottom: 2px solid var(--line-strong); background: var(--paper); z-index: 1; }
+  .lane-head { position: sticky; top: 0; padding: 14px 14px 12px; border-bottom: 1px solid var(--line); background: #0c0f13; z-index: 1; }
   .lane-title-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .lane-title { font-size: 13px; font-weight: 700; }
+  .lane-title { font-size: 13px; font-weight: 600; }
   .lane-gauge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-sunken); color: var(--ink-dim); flex-shrink: 0; }
   .lane-gauge.is-over { background: var(--crit); color: #fff; }
-  .lane-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
-  .lane-empty { font-size: 11.5px; color: var(--ink-faint); padding: 10px 2px; }
+  .lane-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .lane-empty { font-size: 12px; color: var(--ink-faint); padding: 12px 4px; }
   .lane-add-btn { border: 1px dashed var(--line-strong); background: transparent; color: var(--ink-faint); border-radius: 6px; padding: 8px; font-size: 12px; font-weight: 600; text-align: center; }
   .lane-add-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .lane-add-form { display: flex; flex-direction: column; gap: 6px; }
-  .lane-add-form input { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 6px; padding: 7px 9px; font-size: 12.5px; }
+  .lane-add-form input { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 6px; padding: 8px; font-size: 13px; }
   .lane-add-form .row { display: flex; gap: 6px; }
   .lane-add-form button { border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; }
   .lane-add-form .save { background: var(--accent); color: #071013; flex: 1; }
@@ -150,7 +157,7 @@
   .modal { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; width: 100%; max-width: 640px; box-shadow: var(--shadow-modal); transform: translateY(8px) scale(0.98); transition: transform .15s ease; }
   .modal-overlay.is-open .modal { transform: translateY(0) scale(1); }
   .modal-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 24px 0; gap: 12px; }
-  .modal-id { font-size: 11.5px; color: var(--ink-faint); font-weight: 700; }
+  .modal-id { font-size: 12px; color: var(--ink-faint); font-weight: 700; }
   .modal-title-input { font-size: 18px; font-weight: 700; margin: 4px 0 0; width: 100%; border: none; border-radius: 8px; padding: 4px 6px; margin-left: -6px; }
   .modal-title-input:hover, .modal-title-input:focus { background: var(--surface-sunken); }
   .modal-close { border: none; background: var(--surface-sunken); color: var(--ink-dim); width: 30px; height: 30px; border-radius: 8px; font-size: 15px; flex-shrink: 0; }
@@ -158,26 +165,28 @@
   .modal-meta-static { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px 20px; padding: 14px 24px 0; }
   .meta-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .meta-item-wide { grid-column: 1 / -1; }
-  .meta-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); }
+  .meta-label { font-size: 11px; font-weight: 700; letter-spacing: 0; color: var(--ink-faint); }
   .meta-value { font-size: 13px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
   .stage-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .modal-body { padding: 18px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
-  .modal-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); margin-bottom: 8px; display: block; }
+  .modal-section-label { font-size: 11px; font-weight: 700; letter-spacing: 0; color: var(--ink-faint); margin-bottom: 8px; display: block; }
   .modal-title-input, .content-input, .comment-form textarea { background: var(--surface-sunken); }
   .content-input { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; resize: vertical; min-height: 220px; }
   .refs-list { display: flex; flex-wrap: wrap; gap: 6px; }
-  .refs-list span { font-size: 11.5px; background: var(--surface-sunken); border-radius: 6px; padding: 3px 8px; }
+  .refs-list span { font-size: 12px; background: var(--surface-sunken); border-radius: 6px; padding: 4px 8px; }
   .comment { display: flex; gap: 10px; margin-bottom: 12px; }
   .comment-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .comment-name { font-size: 12.5px; font-weight: 700; }
+  .comment-name { font-size: 13px; font-weight: 700; }
   .comment-time { font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: 6px; }
   .comment-text { font-size: 13px; color: var(--ink-dim); margin-top: 2px; line-height: 1.5; white-space: pre-wrap; }
   .no-comment { font-size: 13px; color: var(--ink-faint); margin-bottom: 10px; }
   .comment-form { display: flex; gap: 8px; align-items: flex-start; }
   .comment-form textarea { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; min-height: 40px; resize: vertical; }
-  .comment-form button { border: none; background: var(--accent); color: #071013; border-radius: 6px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; align-self: flex-start; }
+  .comment-form button { border: none; background: var(--accent); color: #071013; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; align-self: flex-start; }
+  .claim-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .claim-form input { min-width: 0; height: 36px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-sunken); padding: 0 10px; }
   .modal-footer { display: flex; justify-content: space-between; padding: 0 24px 22px; }
-  .danger-btn { border: 1px solid var(--crit-soft); background: var(--crit-soft); color: var(--crit); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; }
+  .danger-btn { border: 1px solid var(--crit-soft); background: var(--crit-soft); color: var(--crit); border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 700; }
   .danger-btn:hover { background: var(--crit); color: #fff; }
 
   /* ── roadmap ── */
@@ -187,61 +196,87 @@
   .epic-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-card); }
   .epic-head { padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 8px; }
   .epic-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-  .epic-name { font-size: 15.5px; font-weight: 700; }
+  .epic-name { font-size: 16px; font-weight: 700; }
   .epic-frac { font-size: 13px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
-  .epic-def { font-size: 12.5px; color: var(--ink-dim); line-height: 1.55; max-width: 80ch; }
+  .epic-def { font-size: 13px; color: var(--ink-dim); line-height: 1.6; max-width: 80ch; }
   .epic-body { padding: 4px 20px 18px; display: flex; flex-direction: column; gap: 16px; }
   .story-block { border-top: 1px solid var(--line); padding-top: 14px; }
   .story-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
   .story-name { font-size: 13px; font-weight: 700; }
-  .story-frac { font-size: 11.5px; color: var(--ink-dim); font-weight: 700; flex-shrink: 0; }
+  .story-frac { font-size: 12px; color: var(--ink-dim); font-weight: 700; flex-shrink: 0; }
   .story-def { font-size: 12px; color: var(--ink-faint); margin-bottom: 8px; line-height: 1.5; }
   .story-progress { margin-bottom: 10px; }
   .story-tasks { display: flex; flex-direction: column; gap: 1px; }
-  .task-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; cursor: pointer; border: none; background: transparent; width: 100%; text-align: left; }
+  .task-row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; background: transparent; width: 100%; text-align: left; }
   .task-row:hover { background: var(--surface-sunken); }
   .task-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .task-id { font-size: 10.5px; color: var(--ink-faint); flex-shrink: 0; width: 62px; }
+  .task-id { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; width: 64px; }
   .task-title { flex: 1; }
   .task-title.is-done { color: var(--ink-dim); text-decoration: line-through; text-decoration-color: var(--line-strong); }
   .no-tasks { font-size: 12px; color: var(--ink-faint); padding: 4px 8px; }
 
-  /* ── blueprint semantic stream ── */
-  .blueprint-shell { display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: calc(100vh - 67px); }
-  .blueprint-main { min-width: 0; padding: 18px; }
-  .blueprint-toolbar { min-height: 42px; display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  /* ── blueprint workbench ── */
+  .blueprint-shell { display: grid; grid-template-columns: minmax(0, 1fr) 320px; min-height: calc(100vh - 67px); }
+  .blueprint-main { min-width: 0; padding: 16px; }
+  .blueprint-toolbar { min-height: 44px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .blueprint-toolbar select, .blueprint-create-form input, .blueprint-create-form select {
-    height: 34px; border: 1px solid var(--line-strong); border-radius: 6px;
-    background: var(--surface); padding: 0 10px;
+    height: 36px; border: 1px solid var(--line-strong); border-radius: 6px;
+    background: var(--surface); padding: 0 12px;
   }
   .blueprint-toolbar select { min-width: 220px; }
-  .blueprint-revision { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
-  .blueprint-create-form { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .blueprint-mode-switch { display: flex; padding: 2px; background: var(--surface-sunken); border-radius: 6px; }
+  .blueprint-mode-switch button { height: 30px; min-width: 52px; border: 0; border-radius: 4px; background: transparent; color: var(--ink-faint); font-size: 12px; font-weight: 600; }
+  .blueprint-mode-switch button:hover { color: var(--ink); }
+  .blueprint-mode-switch button.is-active { background: var(--surface-raised); color: var(--accent); }
+  .blueprint-revision { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+  .blueprint-create-form { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .blueprint-create-form[hidden] { display: none; }
-  .blueprint-stage { min-height: 520px; border: 1px solid var(--line); background: var(--surface-sunken); padding: 16px; overflow: auto; }
-  .blueprint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; align-items: start; }
-  .blueprint-node { position: relative; min-height: 124px; border: 1px solid var(--line); border-top: 2px solid var(--accent); border-radius: 8px; background: var(--surface); padding: 11px 12px; }
+  .blueprint-stage { position: relative; height: calc(100vh - 151px); min-height: 560px; background: var(--surface-sunken); overflow: hidden; }
+  .blueprint-canvas { width: 100%; height: 100%; }
+  .blueprint-canvas .excalidraw.theme--dark .excalidraw__canvas { filter: none; }
+  .blueprint-canvas[hidden], .blueprint-outline[hidden], .blueprint-empty[hidden] { display: none; }
+  .blueprint-outline { height: 100%; padding: 16px; overflow: auto; }
+  .blueprint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; align-items: start; }
+  .blueprint-node { position: relative; min-height: 136px; border-top: 2px solid var(--accent); border-radius: 6px; background: var(--surface); padding: 16px; text-align: left; color: inherit; }
+  .blueprint-node:hover { background: var(--surface-raised); }
+  .blueprint-node.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
   .blueprint-node[data-status="fact"] { border-top-color: var(--good); }
   .blueprint-node[data-status="assumption"], .blueprint-node[data-status="hypothesis"] { border-top-color: var(--warn); }
   .blueprint-node[data-status="decision"] { border-top-color: var(--accent); }
   .blueprint-node.is-archived { opacity: 0.42; }
   .blueprint-node-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .blueprint-node-type { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; color: var(--accent); }
-  .blueprint-node-status { font-size: 9px; color: var(--ink-faint); text-transform: uppercase; }
-  .blueprint-node-title { margin-top: 10px; font-size: 13px; line-height: 1.35; }
-  .blueprint-node-body { margin-top: 7px; color: var(--ink-dim); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; }
-  .blueprint-node-meta { margin-top: 10px; font-family: var(--font-mono); font-size: 9px; color: var(--ink-faint); }
+  .blueprint-node-type { font-size: 11px; font-weight: 700; color: var(--accent); }
+  .blueprint-node-status { font-size: 11px; color: var(--ink-faint); }
+  .blueprint-node-title { margin-top: 12px; font-size: 16px; line-height: 1.25; }
+  .blueprint-node-body { margin-top: 8px; color: var(--ink-dim); font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+  .blueprint-node-meta { margin-top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
   .blueprint-edges { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
-  .blueprint-edge { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 8px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); }
+  .blueprint-edge { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px; font-size: 12px; color: var(--ink-dim); }
   .blueprint-edge-relation { color: var(--warn); }
-  .blueprint-stream { border-left: 1px solid var(--line); background: #0d1014; padding: 16px 12px; }
-  .blueprint-stream-title { font-size: 11px; text-transform: uppercase; color: var(--ink-faint); }
-  .blueprint-stream-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .blueprint-event { border-left: 2px solid var(--line-strong); padding: 7px 8px; background: var(--surface-sunken); }
+  .blueprint-inspector { border-left: 1px solid var(--line); background: #0d1014; overflow-y: auto; }
+  .blueprint-panel { padding: 16px; border-bottom: 1px solid var(--line); }
+  .blueprint-panel-title { font-size: 13px; line-height: 1.25; }
+  .blueprint-panel-context { margin-top: 4px; color: var(--ink-faint); font-size: 11px; line-height: 1.5; }
+  .blueprint-stream-list, .blueprint-discussion-list, .blueprint-proposal-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .blueprint-event { border-left: 2px solid var(--line-strong); padding: 8px; background: var(--surface-sunken); }
   .blueprint-event.is-live { border-left-color: var(--accent); }
-  .blueprint-event-meta { font-family: var(--font-mono); font-size: 9px; color: var(--ink-faint); }
-  .blueprint-event-message { margin-top: 4px; color: var(--ink-dim); font-size: 11.5px; line-height: 1.4; }
-  .blueprint-empty { min-height: 460px; display: grid; place-items: center; color: var(--ink-faint); font-size: 12px; }
+  .blueprint-event-meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+  .blueprint-event-message { margin-top: 4px; color: var(--ink-dim); font-size: 12px; line-height: 1.5; }
+  .blueprint-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-faint); font-size: 13px; }
+  .blueprint-discussion { padding: 8px; background: var(--surface-sunken); }
+  .blueprint-discussion-author { font-size: 11px; font-weight: 700; color: var(--ink-dim); }
+  .blueprint-discussion-text { margin-top: 4px; font-size: 12px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
+  .blueprint-discussion-form { margin-top: 12px; }
+  .blueprint-discussion-form textarea { width: 100%; min-height: 72px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-sunken); padding: 8px; font-size: 13px; line-height: 1.5; }
+  .blueprint-discussion-form .toolbar-btn { width: 100%; margin-top: 8px; }
+  .blueprint-proposal { padding: 12px; background: var(--surface-sunken); }
+  .blueprint-proposal-agent { font-size: 11px; font-weight: 700; color: var(--accent); }
+  .blueprint-proposal-message { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--ink-dim); }
+  .blueprint-proposal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .blueprint-proposal-actions button { height: 32px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+  .proposal-accept { border: 0; background: var(--good); color: #07130f; }
+  .proposal-reject { border: 1px solid var(--line-strong); background: transparent; color: var(--ink-dim); }
+  .blueprint-panel-empty { color: var(--ink-faint); font-size: 12px; line-height: 1.5; }
 
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 200; }
   #toast.is-shown { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -251,35 +286,65 @@
   ::-webkit-scrollbar-track { background: var(--surface-sunken); }
   ::-webkit-scrollbar-thumb { background: var(--line-strong); border: 2px solid var(--surface-sunken); border-radius: 8px; }
 
+  @media (max-width: 1100px) {
+    .blueprint-shell { grid-template-columns: minmax(0, 1fr) 288px; }
+    .blueprint-toolbar select { min-width: 180px; }
+  }
+
   @media (max-width: 760px) {
     .app-shell { display: block; }
     .sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
-    .sidebar-brand { padding: 13px 14px 11px; }
-    .sidebar-section-head { padding: 9px 10px 6px 14px; }
-    .project-nav { flex-direction: row; overflow-x: auto; padding: 0 10px 10px; }
-    .project-nav-item { flex: 0 0 164px; }
-    .project-form { margin: 0 10px 10px; }
-    .sidebar-footer { padding: 9px 12px; }
-    .topbar-row1 { min-height: 58px; padding: 8px 14px; }
-    .lane { min-height: calc(100vh - 235px); }
+    .sidebar-brand { padding: 12px 16px; }
+    .brand-sub { margin-top: 2px; }
+    .sidebar-section-head { padding: 8px 12px 4px 16px; }
+    .project-nav { flex-direction: row; gap: 8px; overflow-x: auto; padding: 4px 12px 12px; scroll-snap-type: x proximity; }
+    .project-nav-item { flex: 0 0 172px; min-height: 48px; scroll-snap-align: start; }
+    .project-form { margin: 0 12px 12px; }
+    .sidebar-footer { padding: 8px 12px; }
+    .project-status { margin: 0; }
+    .topbar-row1 { min-height: 64px; padding: 8px 12px; align-items: flex-start; flex-direction: column; }
+    .view-tabs { width: 100%; }
+    .view-tabs button { flex: 1; min-height: 40px; }
+    .lanes { gap: 12px; padding: 12px; }
+    .lane { flex-basis: min(86vw, 320px); min-height: calc(100vh - 292px); }
+    .lane-add-btn { min-height: 44px; }
     .blueprint-shell { grid-template-columns: 1fr; }
     .blueprint-main { padding: 12px; }
-    .blueprint-toolbar { flex-wrap: wrap; }
-    .blueprint-toolbar select { min-width: 0; flex: 1; }
+    .blueprint-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 44px auto; }
+    .blueprint-toolbar select { min-width: 0; width: 100%; }
+    .blueprint-toolbar .icon-btn { width: 44px; height: 44px; }
+    .blueprint-mode-switch { grid-column: 1 / 3; }
+    .blueprint-mode-switch button { min-height: 40px; flex: 1; }
+    #blueprint-materialize { grid-column: 3; grid-row: 2; min-height: 44px; }
+    .blueprint-revision { grid-column: 3; grid-row: 1; align-self: center; }
     .blueprint-create-form { flex-wrap: wrap; }
-    .blueprint-create-form input, .blueprint-create-form select { flex: 1; min-width: 130px; }
-    .blueprint-stream { border-left: none; border-top: 1px solid var(--line); }
+    .blueprint-create-form input, .blueprint-create-form select { flex: 1 1 140px; min-height: 44px; }
+    .blueprint-create-form .toolbar-btn { min-height: 44px; }
+    .blueprint-stage { height: 60vh; min-height: 440px; }
+    .blueprint-inspector { border-left: none; border-top: 1px solid var(--line); }
+    .blueprint-panel { padding: 16px; }
+    .blueprint-discussion-form .toolbar-btn { min-height: 44px; }
+    .modal-overlay { padding: 12px; }
+    .modal-head { padding: 16px 16px 0; }
+    .modal-meta-static { padding: 12px 16px 0; }
+    .modal-body { padding: 16px; }
+    .modal-footer { padding: 0 16px 16px; }
+    .comment-form { flex-direction: column; }
+    .comment-form textarea, .comment-form button { width: 100%; min-height: 44px; }
   }
 </style>
+<script type="module" src="/kanban-assets/app/blueprint-canvas.js"></script>
+</head>
+<body>
 
 <div class="app-shell">
   <aside class="sidebar" aria-label="專案導航">
     <div class="sidebar-brand">
       <span class="brand-name">Monstrare</span>
-      <span class="brand-sub">Agent Operations</span>
+      <span class="brand-sub">專案、決策與執行</span>
     </div>
     <div class="sidebar-section-head">
-      <span class="sidebar-label">Projects</span>
+      <span class="sidebar-label">專案</span>
       <button type="button" class="toolbar-btn icon-btn" id="project-add-toggle" title="新增專案" aria-label="新增專案">＋</button>
     </div>
     <nav class="project-nav" id="project-nav"></nav>
@@ -306,12 +371,12 @@
       <div class="topbar-row1">
         <div class="active-context">
           <div class="active-project-name" id="active-project-name">全部專案</div>
-          <div class="active-project-meta" id="active-project-meta">ALL PROJECTS</div>
+          <div class="active-project-meta" id="active-project-meta">跨專案總覽</div>
         </div>
         <div class="view-tabs" role="tablist">
           <button type="button" class="is-active" data-view="board" role="tab">看板</button>
-          <button type="button" data-view="blueprint" role="tab">Blueprint</button>
-          <button type="button" data-view="roadmap" role="tab">Roadmap</button>
+          <button type="button" data-view="blueprint" role="tab">藍圖</button>
+          <button type="button" data-view="roadmap" role="tab">路線圖</button>
         </div>
       </div>
     </div>
@@ -324,26 +389,50 @@
         <div class="blueprint-shell">
           <div class="blueprint-main">
             <div class="blueprint-toolbar">
-              <select id="blueprint-select" aria-label="目前 Blueprint"></select>
-              <button type="button" class="toolbar-btn icon-btn" id="blueprint-add-toggle" title="新增 Blueprint" aria-label="新增 Blueprint">＋</button>
-              <span class="blueprint-revision" id="blueprint-revision">REV 0</span>
+              <select id="blueprint-select" aria-label="目前藍圖"></select>
+              <button type="button" class="toolbar-btn icon-btn" id="blueprint-add-toggle" title="新增藍圖" aria-label="新增藍圖">＋</button>
+              <div class="blueprint-mode-switch" role="tablist" aria-label="藍圖顯示方式">
+                <button type="button" class="is-active" data-blueprint-mode="canvas" role="tab">畫布</button>
+                <button type="button" data-blueprint-mode="outline" role="tab">大綱</button>
+              </div>
+              <button type="button" class="toolbar-btn" id="blueprint-materialize" disabled>轉成任務卡</button>
+              <span class="blueprint-revision" id="blueprint-revision">版本 0</span>
             </div>
             <div class="blueprint-create-form" id="blueprint-create-form" hidden>
-              <input id="blueprint-title" placeholder="Blueprint title" autocomplete="off">
+              <input id="blueprint-title" placeholder="藍圖名稱" autocomplete="off">
               <input id="blueprint-id" placeholder="blueprint-id" class="mono" autocomplete="off">
               <select id="blueprint-template">
-                <option value="startup-pitch">Startup Pitch</option>
-                <option value="architecture">Architecture</option>
-                <option value="freeform">Freeform</option>
+                <option value="startup-pitch">新創提案</option>
+                <option value="architecture">系統架構</option>
+                <option value="freeform">自由畫布</option>
               </select>
               <button type="button" class="toolbar-btn primary" id="blueprint-create">建立</button>
               <button type="button" class="toolbar-btn" id="blueprint-cancel">取消</button>
             </div>
-            <div class="blueprint-stage" id="blueprint-stage"></div>
+            <div class="blueprint-stage" id="blueprint-stage">
+              <div class="blueprint-canvas" id="blueprint-canvas-root"></div>
+              <div class="blueprint-outline" id="blueprint-outline" hidden></div>
+              <div class="blueprint-empty" id="blueprint-empty">請先選擇專案</div>
+            </div>
           </div>
-          <aside class="blueprint-stream">
-            <h2 class="blueprint-stream-title">Revision stream</h2>
-            <div class="blueprint-stream-list" id="blueprint-stream-list"></div>
+          <aside class="blueprint-inspector">
+            <section class="blueprint-panel">
+              <h2 class="blueprint-panel-title">討論</h2>
+              <p class="blueprint-panel-context" id="blueprint-discussion-context">未選取節點</p>
+              <div class="blueprint-discussion-list" id="blueprint-discussion-list"></div>
+              <div class="blueprint-discussion-form">
+                <textarea id="blueprint-discussion-text" placeholder="記下問題或決定"></textarea>
+                <button type="button" class="toolbar-btn primary" id="blueprint-discussion-send">送出留言</button>
+              </div>
+            </section>
+            <section class="blueprint-panel">
+              <h2 class="blueprint-panel-title">待審提案</h2>
+              <div class="blueprint-proposal-list" id="blueprint-proposal-list"></div>
+            </section>
+            <section class="blueprint-panel">
+              <h2 class="blueprint-panel-title">變更紀錄</h2>
+              <div class="blueprint-stream-list" id="blueprint-stream-list"></div>
+            </section>
           </aside>
         </div>
       </section>
@@ -368,12 +457,12 @@
   try { API_TOKEN = sessionStorage.getItem("monstrare-token") || ""; } catch (_) {}
 
   var STAGES = [
-    { id: "backlog",       label: "Backlog 待辦",      color: "#8994a1" },
-    { id: "blocked",       label: "Blocked",           color: "#f06870" },
-    { id: "ready",         label: "Ready 就緒",        color: "#45d29a" },
-    { id: "implementing",  label: "Implementing 進行中", color: "#42c7d5" },
-    { id: "verify",        label: "Verify 驗證中",      color: "#e2aa43" },
-    { id: "done",          label: "Done 完成",         color: "#57c989" }
+    { id: "backlog",       label: "待辦",   color: "#8994a1" },
+    { id: "blocked",       label: "受阻",   color: "#f06870" },
+    { id: "ready",         label: "可開始", color: "#45d29a" },
+    { id: "implementing",  label: "進行中", color: "#42c7d5" },
+    { id: "verify",        label: "驗證",   color: "#e2aa43" },
+    { id: "done",          label: "完成",   color: "#57c989" }
   ];
   var WIP_CAPS = { implementing: 3, verify: 5 };
 
@@ -385,6 +474,10 @@
   var ACTIVE_BLUEPRINT = "";
   var BLUEPRINT_DOCUMENT = null;
   var BLUEPRINT_EVENTS = [];
+  var BLUEPRINT_DISCUSSIONS = [];
+  var BLUEPRINT_PROPOSALS = [];
+  var SELECTED_BLUEPRINT_NODE = "";
+  var BLUEPRINT_MODE = "canvas";
   var blueprintEventSource = null;
   var openId = null;
   var currentView = "board";
@@ -421,8 +514,8 @@
   function renderProjectControls() {
     var allActive = ACTIVE_PROJECT === "__all__";
     var nav = '<button type="button" class="project-nav-item' + (allActive ? " is-active" : "") + '" data-project-id="__all__">' +
-      '<span class="project-mark">ALL</span><span class="project-nav-copy"><span class="project-nav-name">全部專案</span>' +
-      '<span class="project-nav-prefix">CROSS PROJECT</span></span></button>';
+      '<span class="project-mark">總</span><span class="project-nav-copy"><span class="project-nav-name">全部專案</span>' +
+      '<span class="project-nav-prefix">跨專案總覽</span></span></button>';
     nav += PROJECTS.map(function (project) {
       var active = project.id === ACTIVE_PROJECT;
       return '<button type="button" class="project-nav-item' + (active ? " is-active" : "") + '" data-project-id="' + escapeHtml(project.id) + '">' +
@@ -434,8 +527,8 @@
 
     var active = PROJECTS.filter(function (project) { return project.id === ACTIVE_PROJECT; })[0];
     document.getElementById("active-project-name").textContent = active ? active.name : "全部專案";
-    document.getElementById("active-project-meta").textContent = active ? active.prefix + " · " + active.id : "ALL PROJECTS · AGGREGATE";
-    document.getElementById("project-status").textContent = PROJECTS.length + " PROJECTS · " + TICKETS.length + " CARDS";
+    document.getElementById("active-project-meta").textContent = active ? active.prefix + " · " + active.id : "跨專案總覽";
+    document.getElementById("project-status").textContent = PROJECTS.length + " 個專案 · " + TICKETS.length + " 張卡片";
     document.getElementById("auth-control").hidden = !AUTH_REQUIRED;
     document.getElementById("token-input").value = API_TOKEN;
   }
@@ -467,13 +560,22 @@
   function loadActiveBlueprint() {
     closeBlueprintStream();
     BLUEPRINT_EVENTS = [];
+    BLUEPRINT_DISCUSSIONS = [];
+    BLUEPRINT_PROPOSALS = [];
+    SELECTED_BLUEPRINT_NODE = "";
     if (ACTIVE_PROJECT === "__all__" || !ACTIVE_BLUEPRINT) {
       BLUEPRINT_DOCUMENT = null;
       return Promise.resolve();
     }
-    return api(projectPath(ACTIVE_PROJECT, "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT)))
-      .then(function (document) {
-        BLUEPRINT_DOCUMENT = document;
+    var base = "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT);
+    return Promise.all([
+      api(projectPath(ACTIVE_PROJECT, base)),
+      api(projectPath(ACTIVE_PROJECT, base + "/discussions")),
+      api(projectPath(ACTIVE_PROJECT, base + "/proposals"))
+    ]).then(function (values) {
+        BLUEPRINT_DOCUMENT = values[0];
+        BLUEPRINT_DISCUSSIONS = values[1];
+        BLUEPRINT_PROPOSALS = values[2];
         connectBlueprintStream();
       });
   }
@@ -494,7 +596,7 @@
           BLUEPRINT_DOCUMENT = document;
           renderBlueprint();
         })
-        .catch(function (err) { showToast("Blueprint 更新失敗：" + err.message, true); });
+        .catch(function (err) { showToast("藍圖更新失敗：" + err.message, true); });
     });
   }
   function loadAll() {
@@ -548,9 +650,9 @@
       var dep = getTicket(id);
       if (!dep) missing.push(id); else if (dep.stage !== "done") unmet.push(id);
     });
-    if (missing.length) return '<span class="pill dep-pill dep-missing">⚠️ 依賴的卡片已不存在</span>';
-    if (unmet.length) return '<span class="pill dep-pill dep-blocked">⛔ 依賴 ' + unmet.length + ' 張未完成</span>';
-    return '<span class="pill dep-pill dep-ok">🔗 依賴 ' + tk.dependsOn.length + ' 張（已完成）</span>';
+    if (missing.length) return '<span class="pill dep-pill dep-missing">前置卡片不存在</span>';
+    if (unmet.length) return '<span class="pill dep-pill dep-blocked">' + unmet.length + ' 張前置卡未完成</span>';
+    return '<span class="pill dep-pill dep-ok">前置卡已完成</span>';
   }
 
   function cardHtml(tk) {
@@ -575,7 +677,7 @@
     var cap = WIP_CAPS[stage.id];
     var over = cap && items.length > cap;
     var gauge = cap ? items.length + " / " + cap : String(items.length);
-    var body = items.length ? items.map(cardHtml).join("") : '<div class="lane-empty">— 沒有卡片 —</div>';
+    var body = items.length ? items.map(cardHtml).join("") : '<div class="lane-empty">沒有卡片</div>';
     return (
       '<div class="lane" data-stage="' + stage.id + '" style="border-top: 3px solid ' + stage.color + '">' +
       '<div class="lane-head">' +
@@ -638,7 +740,7 @@
     var stories = (epic.stories || []).map(function (s) { return storyBlockHtml(epic.name, s); }).join("");
     var orphans = tasks.filter(function (t) { return storyNames.indexOf(t.userStory) === -1; });
     if (orphans.length) {
-      stories += storyBlockHtml(epic.name, { name: "（未分類任務）", definition: "屬於這個 Epic，但還沒指定 User Story。", __orphan: true });
+      stories += storyBlockHtml(epic.name, { name: "未分類", definition: "尚未指定使用情境。", __orphan: true });
     }
     return (
       '<div class="epic-card">' +
@@ -656,21 +758,75 @@
   function renderRoadmap() {
     document.getElementById("roadmap").innerHTML = EPICS.length
       ? EPICS.map(epicCardHtml).join("")
-      : '<p class="no-tasks">尚無 Epic。開始新專案時，先跟 Claude／Codex 說明這個專案要做什麼，' +
-        '走一遍 spec-interrogation → implementation-plan 流程，把功能模組（Epic）、用戶需求（User Story）' +
-        '建立 Epic 後，任務卡會在這裡顯示進度。</p>';
+      : '<p class="no-tasks">還沒有路線圖。建立功能群組後，相關任務會在這裡彙整進度。</p>';
   }
 
   function blueprintNodeHtml(node) {
+    var typeLabels = {
+      problem: "問題", customer: "目標使用者", insight: "洞察", solution: "方案",
+      value: "價值", distribution: "通路", "business-model": "商業模式", moat: "護城河",
+      risk: "風險", experiment: "實驗", component: "元件", decision: "決策",
+      task: "任務", note: "筆記"
+    };
+    var statusLabels = {
+      draft: "草稿", fact: "事實", assumption: "假設", hypothesis: "待驗證", decision: "已決定"
+    };
     var confidence = node.confidence === null || node.confidence === undefined
       ? ""
       : " · " + Math.round(node.confidence * 100) + "%";
-    return '<article class="blueprint-node' + (node.archived ? " is-archived" : "") + '" data-status="' + escapeHtml(node.status) + '">' +
-      '<div class="blueprint-node-head"><span class="blueprint-node-type">' + escapeHtml(node.type) + '</span>' +
-      '<span class="blueprint-node-status">' + escapeHtml(node.status) + confidence + '</span></div>' +
+    return '<button type="button" class="blueprint-node' +
+      (node.archived ? " is-archived" : "") +
+      (node.id === SELECTED_BLUEPRINT_NODE ? " is-selected" : "") +
+      '" data-blueprint-node-id="' + escapeHtml(node.id) + '" data-status="' + escapeHtml(node.status) + '">' +
+      '<div class="blueprint-node-head"><span class="blueprint-node-type">' + escapeHtml(typeLabels[node.type] || node.type) + '</span>' +
+      '<span class="blueprint-node-status">' + escapeHtml(statusLabels[node.status] || node.status) + confidence + '</span></div>' +
       '<h3 class="blueprint-node-title">' + escapeHtml(node.title) + '</h3>' +
       (node.body ? '<div class="blueprint-node-body">' + escapeHtml(node.body) + '</div>' : "") +
-      '<div class="blueprint-node-meta">' + escapeHtml(node.id) + ' · ' + escapeHtml(node.updatedBy || node.createdBy || "") + '</div></article>';
+      '<div class="blueprint-node-meta">' + escapeHtml(node.id) + ' · ' + escapeHtml(node.updatedBy || node.createdBy || "") + '</div></button>';
+  }
+
+  function renderBlueprintInspector() {
+    var selected = BLUEPRINT_DOCUMENT && BLUEPRINT_DOCUMENT.nodes.find(function (node) {
+      return node.id === SELECTED_BLUEPRINT_NODE;
+    });
+    document.getElementById("blueprint-discussion-context").textContent = selected
+      ? selected.title
+      : "整張藍圖";
+
+    var visibleDiscussions = BLUEPRINT_DISCUSSIONS.filter(function (message) {
+      if (!selected) return !message.nodeIds.length;
+      return message.nodeIds.indexOf(selected.id) >= 0;
+    });
+    document.getElementById("blueprint-discussion-list").innerHTML = visibleDiscussions.length
+      ? visibleDiscussions.slice().reverse().map(function (message) {
+          return '<div class="blueprint-discussion"><div class="blueprint-discussion-author">' +
+            escapeHtml(message.author.id) + '</div><div class="blueprint-discussion-text">' +
+            escapeHtml(message.text) + '</div></div>';
+        }).join("")
+      : '<p class="blueprint-panel-empty">目前沒有留言。</p>';
+
+    var pending = BLUEPRINT_PROPOSALS.filter(function (proposal) { return proposal.status === "pending"; });
+    document.getElementById("blueprint-proposal-list").innerHTML = pending.length
+      ? pending.map(function (proposal) {
+          return '<article class="blueprint-proposal"><div class="blueprint-proposal-agent">' +
+            escapeHtml(proposal.actor.id) + ' · ' + proposal.operations.length + ' 個變更</div>' +
+            '<div class="blueprint-proposal-message">' +
+            escapeHtml(proposal.message || "未附說明") + '</div>' +
+            '<div class="blueprint-proposal-actions">' +
+            '<button type="button" class="proposal-accept" data-proposal-action="accept" data-proposal-id="' +
+            escapeHtml(proposal.id) + '">接受</button>' +
+            '<button type="button" class="proposal-reject" data-proposal-action="reject" data-proposal-id="' +
+            escapeHtml(proposal.id) + '">拒絕</button></div></article>';
+        }).join("")
+      : '<p class="blueprint-panel-empty">目前沒有待審提案。</p>';
+
+    document.getElementById("blueprint-stream-list").innerHTML = BLUEPRINT_EVENTS.length
+      ? BLUEPRINT_EVENTS.map(function (event) {
+          return '<div class="blueprint-event is-live"><div class="blueprint-event-meta">版本 ' + event.revision + ' · ' +
+            escapeHtml(event.actor.id) + ' · ' + event.operations.length + ' 個變更</div>' +
+            '<div class="blueprint-event-message">' + escapeHtml(event.message || "藍圖已更新") + '</div></div>';
+        }).join("")
+      : '<div class="blueprint-event"><div class="blueprint-event-meta">尚無新變更</div></div>';
   }
 
   function renderBlueprint() {
@@ -679,20 +835,29 @@
       ? BLUEPRINTS.map(function (item) {
           return '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.title) + '</option>';
         }).join("")
-      : '<option value="">No blueprints</option>';
+      : '<option value="">尚無藍圖</option>';
     select.value = ACTIVE_BLUEPRINT;
     select.disabled = ACTIVE_PROJECT === "__all__" || !BLUEPRINTS.length;
     document.getElementById("blueprint-add-toggle").disabled = ACTIVE_PROJECT === "__all__";
     document.getElementById("blueprint-revision").textContent = BLUEPRINT_DOCUMENT
-      ? "REV " + BLUEPRINT_DOCUMENT.revision
-      : "REV 0";
+      ? "版本 " + BLUEPRINT_DOCUMENT.revision
+      : "版本 0";
 
-    var stage = document.getElementById("blueprint-stage");
-    if (ACTIVE_PROJECT === "__all__") {
-      stage.innerHTML = '<div class="blueprint-empty">請先選擇單一專案</div>';
-    } else if (!BLUEPRINT_DOCUMENT) {
-      stage.innerHTML = '<div class="blueprint-empty">尚無 Blueprint</div>';
-    } else {
+    var canvas = document.getElementById("blueprint-canvas-root");
+    var outline = document.getElementById("blueprint-outline");
+    var empty = document.getElementById("blueprint-empty");
+    var hasDocument = !!BLUEPRINT_DOCUMENT;
+    empty.hidden = hasDocument;
+    empty.textContent = ACTIVE_PROJECT === "__all__"
+      ? "請先選擇單一專案"
+      : "這個專案還沒有藍圖";
+    canvas.hidden = !hasDocument || BLUEPRINT_MODE !== "canvas";
+    outline.hidden = !hasDocument || BLUEPRINT_MODE !== "outline";
+    document.querySelectorAll("[data-blueprint-mode]").forEach(function (button) {
+      button.classList.toggle("is-active", button.dataset.blueprintMode === BLUEPRINT_MODE);
+    });
+
+    if (BLUEPRINT_DOCUMENT) {
       var nodes = BLUEPRINT_DOCUMENT.nodes.map(blueprintNodeHtml).join("");
       var titleById = {};
       BLUEPRINT_DOCUMENT.nodes.forEach(function (node) { titleById[node.id] = node.title; });
@@ -702,17 +867,70 @@
           '<span class="blueprint-edge-relation">' + escapeHtml(edge.relation) + '</span>' +
           '<span>' + escapeHtml(titleById[edge.to] || edge.to) + '</span></div>';
       }).join("");
-      stage.innerHTML = (nodes ? '<div class="blueprint-grid">' + nodes + '</div>' : '<div class="blueprint-empty">等待第一個 revision</div>') +
+      outline.innerHTML = (nodes ? '<div class="blueprint-grid">' + nodes + '</div>' : '<p class="blueprint-panel-empty">藍圖目前是空的。</p>') +
         (edges ? '<div class="blueprint-edges">' + edges + '</div>' : "");
     }
 
-    document.getElementById("blueprint-stream-list").innerHTML = BLUEPRINT_EVENTS.length
-      ? BLUEPRINT_EVENTS.map(function (event) {
-          return '<div class="blueprint-event is-live"><div class="blueprint-event-meta">REV ' + event.revision + ' · ' +
-            escapeHtml(event.actor.id) + ' · ' + event.operations.length + ' OPS</div>' +
-            '<div class="blueprint-event-message">' + escapeHtml(event.message || "Blueprint updated") + '</div></div>';
-        }).join("")
-      : '<div class="blueprint-event"><div class="blueprint-event-meta">STREAM READY</div></div>';
+    var selected = BLUEPRINT_DOCUMENT && BLUEPRINT_DOCUMENT.nodes.find(function (node) {
+      return node.id === SELECTED_BLUEPRINT_NODE;
+    });
+    document.getElementById("blueprint-materialize").disabled = !selected ||
+      selected.archived ||
+      ['task', 'experiment'].indexOf(selected.type) < 0 ||
+      selected.linkedCardIds.length > 0;
+    window.__MONSTRARE_BLUEPRINT__ = BLUEPRINT_DOCUMENT;
+    window.dispatchEvent(new CustomEvent("monstrare:blueprint-document", { detail: BLUEPRINT_DOCUMENT }));
+    renderBlueprintInspector();
+  }
+
+  function blueprintActorId() {
+    var value = String(COMMENT_AUTHOR || "owner")
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64);
+    return /^[A-Za-z0-9]/.test(value) ? value : "owner";
+  }
+
+  function activeBlueprintApi(suffix) {
+    return projectPath(
+      ACTIVE_PROJECT,
+      "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT) + (suffix || "")
+    );
+  }
+
+  function acceptBlueprintDocument(document) {
+    BLUEPRINT_DOCUMENT = document;
+    var summary = BLUEPRINTS.find(function (item) { return item.id === document.id; });
+    if (summary) {
+      summary.revision = document.revision;
+      summary.updatedAt = document.updatedAt;
+      summary.nodeCount = document.nodes.length;
+      summary.edgeCount = document.edges.length;
+    }
+    renderBlueprint();
+  }
+
+  function saveBlueprintLayouts(layouts) {
+    if (!BLUEPRINT_DOCUMENT || !layouts.length) return;
+    var operations = layouts.slice(0, 50).map(function (item) {
+      return { type: "patchNode", nodeId: item.nodeId, changes: { layout: item.layout } };
+    });
+    api(activeBlueprintApi("/operations"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        baseRevision: BLUEPRINT_DOCUMENT.revision,
+        actor: { type: "human", id: blueprintActorId() },
+        message: "調整節點位置",
+        operations: operations
+      })
+    }).then(function (result) {
+      acceptBlueprintDocument(result.document);
+    }).catch(function (err) {
+      showToast("位置儲存失敗：" + err.message, true);
+      loadActiveBlueprint().then(renderBlueprint);
+    });
   }
 
   function renderAll() { renderProjectControls(); renderLanes(); renderBlueprint(); renderRoadmap(); }
@@ -746,6 +964,11 @@
             '</span><span class="comment-time">' + escapeHtml(c.time) + '</span><div class="comment-text">' + escapeHtml(c.text) + "</div></div></div>";
         }).join("")
       : '<p class="no-comment">尚無留言。</p>';
+    var claimHtml = tk.agent
+      ? ""
+      : '<div><span class="modal-section-label">Agent 認領</span><div class="claim-form">' +
+        '<input id="claim-agent" placeholder="Agent 名稱" autocomplete="off">' +
+        '<button type="button" class="toolbar-btn primary" id="claim-card">認領</button></div></div>';
 
     document.getElementById("modal").innerHTML =
       '<div class="modal-head"><div style="flex:1;"><div class="modal-id mono">' + tk.id + '</div>' +
@@ -755,14 +978,15 @@
       '<div class="meta-item"><span class="meta-label">階段</span><span class="meta-value"><span class="stage-dot" style="background:' + stage.color + '"></span>' + stage.label + "</span></div>" +
       '<div class="meta-item"><span class="meta-label">風險</span><span class="meta-value">' + riskLabel(tk.risk) + "</span></div>" +
       '<div class="meta-item"><span class="meta-label">分軌</span><span class="meta-value">' + (tk.track && tk.track !== "n/a" ? trackLabel(tk.track) : "不適用") + "</span></div>" +
-      '<div class="meta-item"><span class="meta-label">Owner</span><span class="meta-value">' + (escapeHtml(tk.owner) || "—") + "</span></div>" +
+      '<div class="meta-item"><span class="meta-label">負責人</span><span class="meta-value">' + (escapeHtml(tk.owner) || "—") + "</span></div>" +
       '<div class="meta-item"><span class="meta-label">Agent</span><span class="meta-value">' + (escapeHtml(tk.agent) || "—") + "</span></div>" +
       '<div class="meta-item"><span class="meta-label">需人工核准</span><span class="meta-value">' + (tk.approvalRequired ? "是" : "否") + "</span></div>" +
-      '<div class="meta-item"><span class="meta-label">Epic</span><span class="meta-value">' + (escapeHtml(tk.epic) || "（未分類）") + "</span></div>" +
-      '<div class="meta-item"><span class="meta-label">User Story</span><span class="meta-value">' + (escapeHtml(tk.userStory) || "（未分類）") + "</span></div>" +
-      '<div class="meta-item meta-item-wide"><span class="meta-label">前置任務（dependsOn）</span><span class="meta-value">' + escapeHtml(dependsOnText) + "</span></div>" +
+      '<div class="meta-item"><span class="meta-label">功能群組</span><span class="meta-value">' + (escapeHtml(tk.epic) || "（未分類）") + "</span></div>" +
+      '<div class="meta-item"><span class="meta-label">使用情境</span><span class="meta-value">' + (escapeHtml(tk.userStory) || "（未分類）") + "</span></div>" +
+      '<div class="meta-item meta-item-wide"><span class="meta-label">前置任務</span><span class="meta-value">' + escapeHtml(dependsOnText) + "</span></div>" +
       "</div>" +
       '<div class="modal-body">' +
+      claimHtml +
       '<div><span class="modal-section-label">描述</span><textarea class="content-input" id="field-content" placeholder="補充說明…">' + escapeHtml(tk.content) + "</textarea></div>" +
       '<div><span class="modal-section-label">相關檔案</span>' + refs + "</div>" +
       '<div><span class="modal-section-label">留言</span>' + commentsHtml +
@@ -909,6 +1133,88 @@
       showToast(API_TOKEN ? "Token 已套用" : "Token 已清除");
       return;
     }
+    var blueprintModeButton = e.target.closest("[data-blueprint-mode]");
+    if (blueprintModeButton) {
+      BLUEPRINT_MODE = blueprintModeButton.dataset.blueprintMode;
+      renderBlueprint();
+      return;
+    }
+    var blueprintNodeButton = e.target.closest("[data-blueprint-node-id]");
+    if (blueprintNodeButton) {
+      SELECTED_BLUEPRINT_NODE = blueprintNodeButton.dataset.blueprintNodeId;
+      renderBlueprint();
+      return;
+    }
+    if (e.target.id === "blueprint-discussion-send") {
+      var discussionText = document.getElementById("blueprint-discussion-text").value.trim();
+      if (!discussionText || !BLUEPRINT_DOCUMENT) return;
+      e.target.disabled = true;
+      api(activeBlueprintApi("/discussions"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          author: { type: "human", id: blueprintActorId() },
+          nodeIds: SELECTED_BLUEPRINT_NODE ? [SELECTED_BLUEPRINT_NODE] : [],
+          text: discussionText
+        })
+      }).then(function (message) {
+        BLUEPRINT_DISCUSSIONS.push(message);
+        document.getElementById("blueprint-discussion-text").value = "";
+        renderBlueprintInspector();
+      }).catch(function (err) {
+        showToast("留言送出失敗：" + err.message, true);
+      }).finally(function () {
+        e.target.disabled = false;
+      });
+      return;
+    }
+    var proposalButton = e.target.closest("[data-proposal-action]");
+    if (proposalButton) {
+      proposalButton.disabled = true;
+      api(activeBlueprintApi(
+        "/proposals/" + encodeURIComponent(proposalButton.dataset.proposalId) +
+        "/" + proposalButton.dataset.proposalAction
+      ), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actor: { type: "human", id: blueprintActorId() } })
+      }).then(function (result) {
+        var index = BLUEPRINT_PROPOSALS.findIndex(function (proposal) {
+          return proposal.id === result.proposal.id;
+        });
+        if (index >= 0) BLUEPRINT_PROPOSALS[index] = result.proposal;
+        if (result.document) acceptBlueprintDocument(result.document);
+        else renderBlueprintInspector();
+        showToast(result.proposal.status === "accepted" ? "提案已套用" : "提案已拒絕");
+      }).catch(function (err) {
+        proposalButton.disabled = false;
+        showToast("提案處理失敗：" + err.message, true);
+      });
+      return;
+    }
+    if (e.target.id === "blueprint-materialize") {
+      if (!SELECTED_BLUEPRINT_NODE || !BLUEPRINT_DOCUMENT) return;
+      e.target.disabled = true;
+      api(activeBlueprintApi("/materialize"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nodeIds: [SELECTED_BLUEPRINT_NODE],
+          actor: { type: "human", id: blueprintActorId() },
+          owner: COMMENT_AUTHOR
+        })
+      }).then(function (result) {
+        TICKETS = TICKETS.concat(result.cards);
+        renderProjectControls();
+        renderLanes();
+        acceptBlueprintDocument(result.document);
+        showToast("已建立任務卡 " + result.cards[0].id);
+      }).catch(function (err) {
+        e.target.disabled = false;
+        showToast("任務卡建立失敗：" + err.message, true);
+      });
+      return;
+    }
     if (e.target.id === "blueprint-add-toggle") {
       document.getElementById("blueprint-create-form").hidden = false;
       document.getElementById("blueprint-title").focus();
@@ -922,7 +1228,7 @@
       var blueprintTitle = document.getElementById("blueprint-title").value.trim();
       var blueprintId = document.getElementById("blueprint-id").value.trim().toLowerCase();
       var blueprintTemplate = document.getElementById("blueprint-template").value;
-      if (!blueprintTitle || !blueprintId) { showToast("請填寫 Blueprint title 與 id", true); return; }
+      if (!blueprintTitle || !blueprintId) { showToast("請填寫藍圖名稱與 id", true); return; }
       api(projectPath(ACTIVE_PROJECT, "/blueprints"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -944,7 +1250,7 @@
         document.getElementById("blueprint-create-form").hidden = true;
         connectBlueprintStream();
         renderBlueprint();
-        showToast("Blueprint 已建立");
+        showToast("藍圖已建立");
       }).catch(function (err) { showToast("建立失敗：" + err.message, true); });
       return;
     }
@@ -996,6 +1302,29 @@
       return;
     }
 
+    if (e.target.id === "claim-card" && openId) {
+      var claimInput = document.getElementById("claim-agent");
+      var agentName = claimInput.value.trim();
+      if (!agentName) return;
+      var claimTicket = getTicket(openId);
+      e.target.disabled = true;
+      api(projectPath(projectForTicket(claimTicket), "/cards/" + encodeURIComponent(openId) + "/claim"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: agentName })
+      }).then(function (card) {
+        var ticketIndex = TICKETS.findIndex(function (item) { return item.id === card.id; });
+        if (ticketIndex >= 0) TICKETS[ticketIndex] = card;
+        openModal(card.id);
+        renderLanes();
+        showToast(card.id + " 已由 " + card.agent + " 認領");
+      }).catch(function (err) {
+        e.target.disabled = false;
+        showToast("認領失敗：" + err.message, true);
+      });
+      return;
+    }
+
     if (e.target.id === "delete-card" && openId) {
       if (!window.confirm("確定要刪除 " + openId + " 嗎？此動作無法復原。")) return;
       var idToDelete = openId;
@@ -1027,7 +1356,19 @@
   document.getElementById("blueprint-select").addEventListener("change", function (e) {
     ACTIVE_BLUEPRINT = e.target.value;
     loadActiveBlueprint().then(renderBlueprint)
-      .catch(function (err) { showToast("Blueprint 讀取失敗：" + err.message, true); });
+      .catch(function (err) { showToast("藍圖讀取失敗：" + err.message, true); });
+  });
+
+  window.addEventListener("monstrare:blueprint-node-select", function (event) {
+    var nodeId = event.detail || "";
+    if (!nodeId && BLUEPRINT_MODE === "outline") return;
+    if (nodeId === SELECTED_BLUEPRINT_NODE) return;
+    SELECTED_BLUEPRINT_NODE = nodeId;
+    renderBlueprint();
+  });
+
+  window.addEventListener("monstrare:blueprint-layout", function (event) {
+    saveBlueprintLayouts(Array.isArray(event.detail) ? event.detail : []);
   });
 
   window.addEventListener("beforeunload", closeBlueprintStream);
@@ -1035,3 +1376,5 @@
   loadAll().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });
 })();
 </script>
+</body>
+</html>

@@ -15,6 +15,9 @@ v1 先鎖定 renderer-independent protocol。Excalidraw / tldraw 只負責顯示
 ```text
 <DATA_DIR>/blueprints/<projectId>/<blueprintId>/
   blueprint.json
+  discussions.json
+  proposals/
+    <proposalId>.json
   revisions/
     000001.json
     000002.json
@@ -117,15 +120,29 @@ Edge 必填 `id / from / to / relation`，relation 允許：
 | `GET` | `/api/projects/:pid/blueprints/:bid` | Current semantic document |
 | `POST` | `/api/projects/:pid/blueprints/:bid/operations` | Apply one revision batch |
 | `GET` | `/api/projects/:pid/blueprints/:bid/events?after=N` | Replay then stream SSE revisions |
+| `GET/POST` | `/api/projects/:pid/blueprints/:bid/discussions` | Read/add global or node-scoped discussion |
+| `GET/POST` | `/api/projects/:pid/blueprints/:bid/proposals` | Read/create an agent patch proposal |
+| `POST` | `/api/projects/:pid/blueprints/:bid/proposals/:id/accept` | Human accepts and commits a proposal |
+| `POST` | `/api/projects/:pid/blueprints/:bid/proposals/:id/reject` | Human rejects a proposal without revision |
+| `POST` | `/api/projects/:pid/blueprints/:bid/materialize` | Create cards from task/experiment nodes |
+| `POST` | `/api/projects/:pid/cards/:id/claim` | Atomically claim an unowned card for one agent |
 
 所有 POST 沿用 `KANBAN_AUTH_TOKEN`。SSE event name 為 `blueprint-revision`，`data` 是 revision
 event（不含重複的 full snapshot），renderer 依 operations streaming 更新畫面。
 
-## Next gates
+## Implemented v1
 
-1. Blueprint view 顯示 revision stream 與 semantic nodes。
-2. 加入 renderer adapter，先以 Excalidraw 呈現。
-3. Selected node / region discussion 與 proposed patch preview。
-4. 將 `task` / `experiment` nodes materialize 成 Kanban cards。
-5. Agent claim、execution evidence 與 Blueprint status 回寫。
+- Excalidraw renderer adapter 將 semantic nodes / edges 投影成可縮放、可選取、可移動的畫布；
+  layout 調整會轉成 `patchNode` operation，語意 document 仍是 source of truth。
+- Outline 是無 canvas 環境的可讀 fallback。
+- 討論可綁定目前選取的 node，也可記在整張藍圖。
+- agent proposal 先 dry-run 驗證；人工接受才建立 revision，拒絕不改 document。
+- `task` / `experiment` node 可 materialize 成 project-scoped cards，並回寫 `linkedCardIds`。
+- 卡片 claim 採 first-writer-wins；已被其他 agent 認領時回 `409` 與 `claimedBy`。
+- 桌面使用固定左側 project nav；窄螢幕改為橫向 project rail，canvas 與 inspector 垂直排列。
 
+## Current limits
+
+- Excalidraw 的自由手繪元素不是 semantic document 的一部分；v1 只持久化 node layout。
+- proposal 目前以整批 operations 顯示摘要，尚未提供逐欄位 visual diff。
+- claim 只建立 owner，不含 lease / heartbeat；agent crash 後仍需人工重新指派。

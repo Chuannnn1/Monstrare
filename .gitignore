@@ -7,4 +7,7 @@ build/
 coverage/
 .cache/
 tmp/
+tools/kanban/public/
+.playwright-cli/
+output/
 

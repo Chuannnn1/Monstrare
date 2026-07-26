@@ -4,8 +4,19 @@
   "description": "A gate-based governance workflow for AI coding agents. Nothing ships without evidence.",
   "license": "MIT",
   "scripts": {
+    "build": "node scripts/build-kanban-blueprint.mjs",
+    "prekanban": "npm run build",
     "kanban": "node tools/kanban/server.mjs",
+    "start": "npm run kanban",
     "kanban:migrate": "node scripts/migrate-kanban-data.mjs",
-    "test": "node --test \"tools/kanban/test/*.test.mjs\""
+    "test": "npm run build && node --test \"tools/kanban/test/*.test.mjs\""
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.17.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

@@ -1,27 +1,28 @@
 <title>專案管理平台</title>
 <style>
   :root {
-    --paper: #f5f6f8;
-    --surface: #ffffff;
-    --surface-sunken: #eef0f3;
-    --ink: #14181f;
-    --ink-dim: #5b6472;
-    --ink-faint: #8890a0;
-    --line: #dde1e7;
-    --line-strong: #c3c9d3;
-    --accent: #3446d6;
-    --accent-soft: #eaeefc;
-    --good: #1f9d6b;
-    --good-soft: #e4f5ee;
-    --warn: #c9860a;
-    --warn-soft: #fbf1de;
-    --crit: #d23b3b;
-    --crit-soft: #fbe8e8;
-    --muted: #6b7280;
-    --muted-soft: #eceef1;
-    --shadow-card: 0 1px 2px rgba(20, 24, 31, 0.06), 0 1px 1px rgba(20, 24, 31, 0.04);
-    --shadow-card-hover: 0 6px 20px rgba(20, 24, 31, 0.12);
-    --shadow-modal: 0 24px 64px rgba(20, 24, 31, 0.28);
+    --paper: #090b0e;
+    --surface: #11151a;
+    --surface-raised: #171c22;
+    --surface-sunken: #0c1014;
+    --ink: #e8edf3;
+    --ink-dim: #9ba6b3;
+    --ink-faint: #66717e;
+    --line: #232a32;
+    --line-strong: #343d48;
+    --accent: #42c7d5;
+    --accent-soft: #102b30;
+    --good: #45d29a;
+    --good-soft: #102921;
+    --warn: #e2aa43;
+    --warn-soft: #302510;
+    --crit: #f06870;
+    --crit-soft: #32171b;
+    --muted: #8994a1;
+    --muted-soft: #20262d;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(66, 199, 213, 0.2);
+    --shadow-modal: 0 28px 80px rgba(0, 0, 0, 0.62);
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
@@ -36,41 +37,58 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
   }
+  .app-shell { min-height: 100vh; display: grid; grid-template-columns: 236px minmax(0, 1fr); }
+  .workspace { min-width: 0; }
 
   h1, h2, h3 { text-wrap: balance; font-weight: 650; }
   button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
   button { cursor: pointer; }
   button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(52, 70, 214, 0.35);
+    box-shadow: 0 0 0 3px rgba(66, 199, 213, 0.28);
     border-radius: 6px;
   }
   .tabular { font-variant-numeric: tabular-nums; }
   .mono { font-family: var(--font-mono); }
 
   /* ── Top chrome ── */
-  .topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
-  .topbar-row1 { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 28px 4px; gap: 16px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: baseline; gap: 10px; }
-  .brand-name { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
-  .brand-sub { font-size: 12.5px; color: var(--ink-dim); }
-  .projectbar { display: flex; align-items: center; gap: 8px; padding: 8px 28px 12px; flex-wrap: wrap; }
-  .projectbar select, .projectbar input { height: 34px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); padding: 0 10px; }
-  .projectbar select { min-width: 180px; font-weight: 650; }
-  .projectbar input { width: 150px; }
-  .projectbar .prefix-input { width: 96px; text-transform: uppercase; }
+  .sidebar { position: sticky; top: 0; height: 100vh; z-index: 30; display: flex; flex-direction: column; background: #0d1014; border-right: 1px solid var(--line); overflow: hidden; }
+  .sidebar-brand { padding: 20px 16px 18px; border-bottom: 1px solid var(--line); }
+  .brand-name { display: block; font-size: 16px; font-weight: 720; letter-spacing: 0; }
+  .brand-sub { display: block; margin-top: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0; }
+  .sidebar-section-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 12px 8px 16px; }
+  .sidebar-label { font-size: 10px; font-weight: 750; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0; }
+  .project-nav { flex: 1; padding: 0 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+  .project-nav-item { width: 100%; min-height: 42px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink-dim); display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 9px; padding: 5px 8px; text-align: left; }
+  .project-nav-item:hover { color: var(--ink); background: var(--surface-raised); }
+  .project-nav-item.is-active { color: var(--ink); border-color: #28525a; background: var(--accent-soft); }
+  .project-mark { width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 5px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 9px; font-weight: 750; color: var(--accent); background: var(--surface-sunken); }
+  .project-nav-item.is-active .project-mark { border-color: var(--accent); box-shadow: 0 0 12px rgba(66, 199, 213, 0.18); }
+  .project-nav-copy { min-width: 0; }
+  .project-nav-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 650; }
+  .project-nav-prefix { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-faint); }
+  .sidebar-footer { margin-top: auto; padding: 12px; border-top: 1px solid var(--line); }
+  .project-status { display: block; color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; margin-bottom: 9px; }
+  .project-form { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin: 4px 8px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-sunken); }
+  .project-form input, .auth-control input { width: 100%; height: 32px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); padding: 0 9px; }
+  .project-form .prefix-input { text-transform: uppercase; }
   .toolbar-btn { height: 34px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); padding: 0 11px; font-weight: 650; color: var(--ink-dim); }
   .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .toolbar-btn.primary { border-color: var(--ink); background: var(--ink); color: #fff; }
-  .project-form { display: flex; gap: 6px; align-items: center; }
+  .toolbar-btn.primary { border-color: var(--accent); background: var(--accent); color: #071013; }
+  .toolbar-btn.icon-btn { width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; }
+  .project-form-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .project-form[hidden], .auth-control[hidden] { display: none; }
-  .auth-control { display: flex; gap: 6px; align-items: center; margin-left: auto; }
-  .project-status { color: var(--ink-faint); font-size: 12px; white-space: nowrap; }
+  .auth-control { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: rgba(17, 21, 26, 0.96); border-bottom: 1px solid var(--line); }
+  .topbar-row1 { min-height: 66px; display: flex; align-items: center; justify-content: space-between; padding: 10px 22px; gap: 16px; }
+  .active-context { min-width: 0; }
+  .active-project-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .active-project-meta { margin-top: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
 
-  .view-tabs { display: flex; gap: 4px; background: var(--surface-sunken); border-radius: 10px; padding: 3px; }
-  .view-tabs button { border: none; background: transparent; color: var(--ink-dim); font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 8px; transition: background-color .15s ease, color .15s ease; }
+  .view-tabs { display: flex; gap: 3px; background: var(--surface-sunken); border: 1px solid var(--line); border-radius: 7px; padding: 3px; }
+  .view-tabs button { border: none; background: transparent; color: var(--ink-dim); font-size: 12px; font-weight: 650; padding: 7px 13px; border-radius: 5px; transition: background-color .15s ease, color .15s ease; }
   .view-tabs button:hover { color: var(--ink); }
-  .view-tabs button.is-active { background: var(--ink); color: #fff; }
+  .view-tabs button.is-active { background: var(--surface-raised); color: var(--accent); box-shadow: inset 0 0 0 1px var(--line-strong); }
   .view { display: none; }
   .view.is-active { display: block; }
 
@@ -91,7 +109,7 @@
 
   /* ── card ── */
   .ticket-card {
-    position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
     padding: 10px 12px 10px 14px; box-shadow: var(--shadow-card); cursor: grab;
     transition: box-shadow .15s ease, transform .15s ease, opacity .15s ease;
   }
@@ -107,7 +125,7 @@
 
   /* ── lanes ── */
   .lanes { display: flex; gap: 1px; background: var(--line); overflow-x: auto; scroll-snap-type: x proximity; border-top: 1px solid var(--line); }
-  .lane { flex: 0 0 232px; scroll-snap-align: start; background: var(--paper); min-height: calc(100vh - 156px); display: flex; flex-direction: column; }
+  .lane { flex: 0 0 232px; scroll-snap-align: start; background: var(--paper); min-height: calc(100vh - 67px); display: flex; flex-direction: column; }
   .lane.is-drag-over { background: var(--accent-soft); }
   .lane-head { position: sticky; top: 0; padding: 12px 12px 10px; border-bottom: 2px solid var(--line-strong); background: var(--paper); z-index: 1; }
   .lane-title-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -116,20 +134,20 @@
   .lane-gauge.is-over { background: var(--crit); color: #fff; }
   .lane-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
   .lane-empty { font-size: 11.5px; color: var(--ink-faint); padding: 10px 2px; }
-  .lane-add-btn { border: 1px dashed var(--line-strong); background: transparent; color: var(--ink-faint); border-radius: 10px; padding: 8px; font-size: 12px; font-weight: 600; text-align: center; }
+  .lane-add-btn { border: 1px dashed var(--line-strong); background: transparent; color: var(--ink-faint); border-radius: 6px; padding: 8px; font-size: 12px; font-weight: 600; text-align: center; }
   .lane-add-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .lane-add-form { display: flex; flex-direction: column; gap: 6px; }
-  .lane-add-form input { border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; }
+  .lane-add-form input { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 6px; padding: 7px 9px; font-size: 12.5px; }
   .lane-add-form .row { display: flex; gap: 6px; }
-  .lane-add-form button { border: none; border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; }
-  .lane-add-form .save { background: var(--ink); color: #fff; flex: 1; }
+  .lane-add-form button { border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; }
+  .lane-add-form .save { background: var(--accent); color: #071013; flex: 1; }
   .lane-add-form .cancel { background: var(--surface-sunken); color: var(--ink-dim); }
 
   /* ── modal ── */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(20, 24, 31, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 5vh 20px; overflow-y: auto; z-index: 100; opacity: 0; transition: opacity .15s ease; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.68); display: flex; align-items: flex-start; justify-content: center; padding: 5vh 20px; overflow-y: auto; z-index: 100; opacity: 0; transition: opacity .15s ease; }
   .modal-overlay.is-open { opacity: 1; }
   .modal-overlay[hidden] { display: none; }
-  .modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 640px; box-shadow: var(--shadow-modal); transform: translateY(8px) scale(0.98); transition: transform .15s ease; }
+  .modal { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; width: 100%; max-width: 640px; box-shadow: var(--shadow-modal); transform: translateY(8px) scale(0.98); transition: transform .15s ease; }
   .modal-overlay.is-open .modal { transform: translateY(0) scale(1); }
   .modal-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 24px 0; gap: 12px; }
   .modal-id { font-size: 11.5px; color: var(--ink-faint); font-weight: 700; }
@@ -145,7 +163,8 @@
   .stage-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .modal-body { padding: 18px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
   .modal-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); margin-bottom: 8px; display: block; }
-  .content-input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; resize: vertical; min-height: 220px; }
+  .modal-title-input, .content-input, .comment-form textarea { background: var(--surface-sunken); }
+  .content-input { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; resize: vertical; min-height: 220px; }
   .refs-list { display: flex; flex-wrap: wrap; gap: 6px; }
   .refs-list span { font-size: 11.5px; background: var(--surface-sunken); border-radius: 6px; padding: 3px 8px; }
   .comment { display: flex; gap: 10px; margin-bottom: 12px; }
@@ -155,8 +174,8 @@
   .comment-text { font-size: 13px; color: var(--ink-dim); margin-top: 2px; line-height: 1.5; white-space: pre-wrap; }
   .no-comment { font-size: 13px; color: var(--ink-faint); margin-bottom: 10px; }
   .comment-form { display: flex; gap: 8px; align-items: flex-start; }
-  .comment-form textarea { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; min-height: 40px; resize: vertical; }
-  .comment-form button { border: none; background: var(--ink); color: #fff; border-radius: 8px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; align-self: flex-start; }
+  .comment-form textarea { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; min-height: 40px; resize: vertical; }
+  .comment-form button { border: none; background: var(--accent); color: #071013; border-radius: 6px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; align-self: flex-start; }
   .modal-footer { display: flex; justify-content: space-between; padding: 0 24px 22px; }
   .danger-btn { border: 1px solid var(--crit-soft); background: var(--crit-soft); color: var(--crit); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; }
   .danger-btn:hover { background: var(--crit); color: #fff; }
@@ -165,7 +184,7 @@
   .roadmap { padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 20px; max-width: 1100px; }
   .progress-bar { height: 6px; border-radius: 4px; background: var(--surface-sunken); overflow: hidden; }
   .progress-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
-  .epic-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-card); }
+  .epic-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-card); }
   .epic-head { padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 8px; }
   .epic-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .epic-name { font-size: 15.5px; font-weight: 700; }
@@ -191,54 +210,77 @@
   #toast.is-shown { opacity: 1; transform: translateX(-50%) translateY(0); }
   #toast.is-error { background: var(--crit); }
 
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--surface-sunken); }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border: 2px solid var(--surface-sunken); border-radius: 8px; }
+
   @media (max-width: 760px) {
-    .topbar-row1, .projectbar { padding-left: 14px; padding-right: 14px; }
-    .brand-sub { display: none; }
-    .projectbar select { min-width: 0; flex: 1; }
-    .project-form { width: 100%; flex-wrap: wrap; }
-    .project-form input { flex: 1; min-width: 110px; }
-    .auth-control { width: 100%; margin-left: 0; }
-    .auth-control input { flex: 1; width: auto; }
+    .app-shell { display: block; }
+    .sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+    .sidebar-brand { padding: 13px 14px 11px; }
+    .sidebar-section-head { padding: 9px 10px 6px 14px; }
+    .project-nav { flex-direction: row; overflow-x: auto; padding: 0 10px 10px; }
+    .project-nav-item { flex: 0 0 164px; }
+    .project-form { margin: 0 10px 10px; }
+    .sidebar-footer { padding: 9px 12px; }
+    .topbar-row1 { min-height: 58px; padding: 8px 14px; }
+    .lane { min-height: calc(100vh - 235px); }
   }
 </style>
 
-<div class="topbar">
-  <div class="topbar-row1">
-    <div class="brand">
-      <span class="brand-name">專案管理平台</span>
-      <span class="brand-sub">ai/process/kanban.md 的視覺化 — Variant A · 控制塔</span>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="專案導航">
+    <div class="sidebar-brand">
+      <span class="brand-name">Monstrare</span>
+      <span class="brand-sub">Agent Operations</span>
     </div>
-    <div class="view-tabs" role="tablist">
-      <button type="button" class="is-active" data-view="board" role="tab">看板</button>
-      <button type="button" data-view="roadmap" role="tab">藍圖</button>
+    <div class="sidebar-section-head">
+      <span class="sidebar-label">Projects</span>
+      <button type="button" class="toolbar-btn icon-btn" id="project-add-toggle" title="新增專案" aria-label="新增專案">＋</button>
     </div>
-  </div>
-  <div class="projectbar">
-    <select id="project-select" aria-label="目前專案"></select>
-    <button type="button" class="toolbar-btn" id="project-add-toggle" title="新增專案">＋</button>
-    <span class="project-status" id="project-status"></span>
+    <nav class="project-nav" id="project-nav"></nav>
     <div class="project-form" id="project-form" hidden>
       <input id="project-name" placeholder="專案名稱" autocomplete="off">
       <input id="project-id" placeholder="project-id" class="mono" autocomplete="off">
       <input id="project-prefix" placeholder="PREFIX" class="mono prefix-input" maxlength="12" autocomplete="off">
-      <button type="button" class="toolbar-btn primary" id="project-create">建立</button>
-      <button type="button" class="toolbar-btn" id="project-cancel">取消</button>
+      <div class="project-form-actions">
+        <button type="button" class="toolbar-btn primary" id="project-create">建立</button>
+        <button type="button" class="toolbar-btn" id="project-cancel">取消</button>
+      </div>
     </div>
-    <div class="auth-control" id="auth-control" hidden>
-      <input type="password" id="token-input" placeholder="Bearer token" autocomplete="off">
-      <button type="button" class="toolbar-btn" id="token-apply">套用</button>
+    <div class="sidebar-footer">
+      <span class="project-status" id="project-status"></span>
+      <div class="auth-control" id="auth-control" hidden>
+        <input type="password" id="token-input" placeholder="Bearer token" autocomplete="off">
+        <button type="button" class="toolbar-btn" id="token-apply">套用</button>
+      </div>
     </div>
+  </aside>
+
+  <div class="workspace">
+    <div class="topbar">
+      <div class="topbar-row1">
+        <div class="active-context">
+          <div class="active-project-name" id="active-project-name">全部專案</div>
+          <div class="active-project-meta" id="active-project-meta">ALL PROJECTS</div>
+        </div>
+        <div class="view-tabs" role="tablist">
+          <button type="button" class="is-active" data-view="board" role="tab">看板</button>
+          <button type="button" data-view="roadmap" role="tab">Roadmap</button>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <section id="view-board" class="view is-active">
+        <div class="lanes" id="lanes"></div>
+      </section>
+      <section id="view-roadmap" class="view">
+        <div class="roadmap" id="roadmap"></div>
+      </section>
+    </main>
   </div>
 </div>
-
-<main>
-  <section id="view-board" class="view is-active">
-    <div class="lanes" id="lanes"></div>
-  </section>
-  <section id="view-roadmap" class="view">
-    <div class="roadmap" id="roadmap"></div>
-  </section>
-</main>
 
 <div class="modal-overlay" id="modal-overlay" hidden>
   <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
@@ -254,12 +296,12 @@
   try { API_TOKEN = sessionStorage.getItem("monstrare-token") || ""; } catch (_) {}
 
   var STAGES = [
-    { id: "backlog",       label: "Backlog 待辦",      color: "#5b6472" },
-    { id: "blocked",       label: "Blocked",           color: "#d23b3b" },
-    { id: "ready",         label: "Ready 就緒",        color: "#147d6f" },
-    { id: "implementing",  label: "Implementing 進行中", color: "#3446d6" },
-    { id: "verify",        label: "Verify 驗證中",      color: "#6b46c1" },
-    { id: "done",          label: "Done 完成",         color: "#1f9d6b" }
+    { id: "backlog",       label: "Backlog 待辦",      color: "#8994a1" },
+    { id: "blocked",       label: "Blocked",           color: "#f06870" },
+    { id: "ready",         label: "Ready 就緒",        color: "#45d29a" },
+    { id: "implementing",  label: "Implementing 進行中", color: "#42c7d5" },
+    { id: "verify",        label: "Verify 驗證中",      color: "#e2aa43" },
+    { id: "done",          label: "Done 完成",         color: "#57c989" }
   ];
   var WIP_CAPS = { implementing: 3, verify: 5 };
 
@@ -300,12 +342,23 @@
     return tk.project || (ACTIVE_PROJECT !== "__all__" ? ACTIVE_PROJECT : "");
   }
   function renderProjectControls() {
-    var select = document.getElementById("project-select");
-    select.innerHTML = '<option value="__all__">全部專案</option>' + PROJECTS.map(function (project) {
-      return '<option value="' + escapeHtml(project.id) + '">' + escapeHtml(project.name) + " · " + escapeHtml(project.prefix) + "</option>";
+    var allActive = ACTIVE_PROJECT === "__all__";
+    var nav = '<button type="button" class="project-nav-item' + (allActive ? " is-active" : "") + '" data-project-id="__all__">' +
+      '<span class="project-mark">ALL</span><span class="project-nav-copy"><span class="project-nav-name">全部專案</span>' +
+      '<span class="project-nav-prefix">CROSS PROJECT</span></span></button>';
+    nav += PROJECTS.map(function (project) {
+      var active = project.id === ACTIVE_PROJECT;
+      return '<button type="button" class="project-nav-item' + (active ? " is-active" : "") + '" data-project-id="' + escapeHtml(project.id) + '">' +
+        '<span class="project-mark">' + escapeHtml(project.prefix.slice(0, 3)) + '</span><span class="project-nav-copy">' +
+        '<span class="project-nav-name">' + escapeHtml(project.name) + '</span><span class="project-nav-prefix">' +
+        escapeHtml(project.prefix) + '</span></span></button>';
     }).join("");
-    select.value = ACTIVE_PROJECT;
-    document.getElementById("project-status").textContent = TICKETS.length + " 張卡 · " + PROJECTS.length + " 個專案";
+    document.getElementById("project-nav").innerHTML = nav;
+
+    var active = PROJECTS.filter(function (project) { return project.id === ACTIVE_PROJECT; })[0];
+    document.getElementById("active-project-name").textContent = active ? active.name : "全部專案";
+    document.getElementById("active-project-meta").textContent = active ? active.prefix + " · " + active.id : "ALL PROJECTS · AGGREGATE";
+    document.getElementById("project-status").textContent = PROJECTS.length + " PROJECTS · " + TICKETS.length + " CARDS";
     document.getElementById("auth-control").hidden = !AUTH_REQUIRED;
     document.getElementById("token-input").value = API_TOKEN;
   }
@@ -641,6 +694,13 @@
   });
 
   document.addEventListener("click", function (e) {
+    var projectNavItem = e.target.closest("[data-project-id]");
+    if (projectNavItem) {
+      ACTIVE_PROJECT = projectNavItem.dataset.projectId;
+      try { sessionStorage.setItem("monstrare-project", ACTIVE_PROJECT); } catch (_) {}
+      loadProjectData().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });
+      return;
+    }
     if (e.target.id === "project-add-toggle") {
       document.getElementById("project-form").hidden = false;
       document.getElementById("project-name").focus();
@@ -747,12 +807,6 @@
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !document.getElementById("modal-overlay").hidden) closeModal();
     if (e.key === "Enter" && e.target.id === "token-input") document.getElementById("token-apply").click();
-  });
-
-  document.getElementById("project-select").addEventListener("change", function (e) {
-    ACTIVE_PROJECT = e.target.value;
-    try { sessionStorage.setItem("monstrare-project", ACTIVE_PROJECT); } catch (_) {}
-    loadProjectData().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });
   });
 
   loadAll().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });

@@ -71,10 +71,12 @@ Zeabur、資料放 persistent volume」。
 
 ## 前端 integration
 
-- topbar project selector 列出 `/api/projects` +「全部專案」；單一專案讀 scoped cards/epics，全部視圖讀 aggregate cards 並聚合各專案 epics。
-- `＋` 展開 compact project form，透過 `POST /api/projects` 建立專案。
+- desktop 固定左側 project navigation，列出 `/api/projects` +「全部專案」；點一下直接切換，active project 同步顯示在 workspace header。mobile 改為橫向可捲動 project rail。
+- sidebar `＋` 展開 compact project form，透過 `POST /api/projects` 建立專案。
 - 所有 card 寫入依卡片的 `project` 改送 `/api/projects/:pid/cards`；全部視圖的 bulk update 先按 project 分組。
 - `/api/config.authRequired` 為 true 時顯示 bearer token input；token 只保存在 browser `sessionStorage`，並附加到 API request。
+- 視覺採 neutral charcoal dark theme；cyan 作為互動 accent，green / amber / red 分別表達完成、驗證與阻擋狀態，不使用漸層或單一藍紫色盤。
+- 原本名為「藍圖」的 Epic 視圖改名為 `Roadmap`，把 `Blueprint` 名稱保留給後續 agent-assisted strategy canvas。
 
 ## Migration 與向後相容
 

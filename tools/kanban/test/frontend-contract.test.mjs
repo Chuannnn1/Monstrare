@@ -31,3 +31,13 @@ test('frontend writes 使用 project-scoped API，不再呼叫 legacy global end
   assert.doesNotMatch(script, /api\("\/api\/epics"/);
   assert.doesNotMatch(script, /api\("\/api\/cards\/"/);
 });
+
+test('Blueprint view 使用 project-scoped documents 與 SSE revision stream', () => {
+  assert.match(html, /id="view-blueprint"/);
+  assert.match(html, /id="blueprint-stage"/);
+  assert.match(html, /id="blueprint-stream-list"/);
+  assert.match(script, /projectPath\(ACTIVE_PROJECT, "\/blueprints"\)/);
+  assert.match(script, /new EventSource\(url\)/);
+  assert.match(script, /blueprint-revision/);
+  assert.match(html, /data-view="roadmap" role="tab">Roadmap/);
+});

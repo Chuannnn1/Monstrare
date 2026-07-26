@@ -206,6 +206,43 @@
   .task-title.is-done { color: var(--ink-dim); text-decoration: line-through; text-decoration-color: var(--line-strong); }
   .no-tasks { font-size: 12px; color: var(--ink-faint); padding: 4px 8px; }
 
+  /* ── blueprint semantic stream ── */
+  .blueprint-shell { display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: calc(100vh - 67px); }
+  .blueprint-main { min-width: 0; padding: 18px; }
+  .blueprint-toolbar { min-height: 42px; display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .blueprint-toolbar select, .blueprint-create-form input, .blueprint-create-form select {
+    height: 34px; border: 1px solid var(--line-strong); border-radius: 6px;
+    background: var(--surface); padding: 0 10px;
+  }
+  .blueprint-toolbar select { min-width: 220px; }
+  .blueprint-revision { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
+  .blueprint-create-form { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .blueprint-create-form[hidden] { display: none; }
+  .blueprint-stage { min-height: 520px; border: 1px solid var(--line); background: var(--surface-sunken); padding: 16px; overflow: auto; }
+  .blueprint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; align-items: start; }
+  .blueprint-node { position: relative; min-height: 124px; border: 1px solid var(--line); border-top: 2px solid var(--accent); border-radius: 8px; background: var(--surface); padding: 11px 12px; }
+  .blueprint-node[data-status="fact"] { border-top-color: var(--good); }
+  .blueprint-node[data-status="assumption"], .blueprint-node[data-status="hypothesis"] { border-top-color: var(--warn); }
+  .blueprint-node[data-status="decision"] { border-top-color: var(--accent); }
+  .blueprint-node.is-archived { opacity: 0.42; }
+  .blueprint-node-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .blueprint-node-type { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; color: var(--accent); }
+  .blueprint-node-status { font-size: 9px; color: var(--ink-faint); text-transform: uppercase; }
+  .blueprint-node-title { margin-top: 10px; font-size: 13px; line-height: 1.35; }
+  .blueprint-node-body { margin-top: 7px; color: var(--ink-dim); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; }
+  .blueprint-node-meta { margin-top: 10px; font-family: var(--font-mono); font-size: 9px; color: var(--ink-faint); }
+  .blueprint-edges { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .blueprint-edge { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 8px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); }
+  .blueprint-edge-relation { color: var(--warn); }
+  .blueprint-stream { border-left: 1px solid var(--line); background: #0d1014; padding: 16px 12px; }
+  .blueprint-stream-title { font-size: 11px; text-transform: uppercase; color: var(--ink-faint); }
+  .blueprint-stream-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .blueprint-event { border-left: 2px solid var(--line-strong); padding: 7px 8px; background: var(--surface-sunken); }
+  .blueprint-event.is-live { border-left-color: var(--accent); }
+  .blueprint-event-meta { font-family: var(--font-mono); font-size: 9px; color: var(--ink-faint); }
+  .blueprint-event-message { margin-top: 4px; color: var(--ink-dim); font-size: 11.5px; line-height: 1.4; }
+  .blueprint-empty { min-height: 460px; display: grid; place-items: center; color: var(--ink-faint); font-size: 12px; }
+
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 200; }
   #toast.is-shown { opacity: 1; transform: translateX(-50%) translateY(0); }
   #toast.is-error { background: var(--crit); }
@@ -225,6 +262,13 @@
     .sidebar-footer { padding: 9px 12px; }
     .topbar-row1 { min-height: 58px; padding: 8px 14px; }
     .lane { min-height: calc(100vh - 235px); }
+    .blueprint-shell { grid-template-columns: 1fr; }
+    .blueprint-main { padding: 12px; }
+    .blueprint-toolbar { flex-wrap: wrap; }
+    .blueprint-toolbar select { min-width: 0; flex: 1; }
+    .blueprint-create-form { flex-wrap: wrap; }
+    .blueprint-create-form input, .blueprint-create-form select { flex: 1; min-width: 130px; }
+    .blueprint-stream { border-left: none; border-top: 1px solid var(--line); }
   }
 </style>
 
@@ -266,6 +310,7 @@
         </div>
         <div class="view-tabs" role="tablist">
           <button type="button" class="is-active" data-view="board" role="tab">看板</button>
+          <button type="button" data-view="blueprint" role="tab">Blueprint</button>
           <button type="button" data-view="roadmap" role="tab">Roadmap</button>
         </div>
       </div>
@@ -274,6 +319,33 @@
     <main>
       <section id="view-board" class="view is-active">
         <div class="lanes" id="lanes"></div>
+      </section>
+      <section id="view-blueprint" class="view">
+        <div class="blueprint-shell">
+          <div class="blueprint-main">
+            <div class="blueprint-toolbar">
+              <select id="blueprint-select" aria-label="目前 Blueprint"></select>
+              <button type="button" class="toolbar-btn icon-btn" id="blueprint-add-toggle" title="新增 Blueprint" aria-label="新增 Blueprint">＋</button>
+              <span class="blueprint-revision" id="blueprint-revision">REV 0</span>
+            </div>
+            <div class="blueprint-create-form" id="blueprint-create-form" hidden>
+              <input id="blueprint-title" placeholder="Blueprint title" autocomplete="off">
+              <input id="blueprint-id" placeholder="blueprint-id" class="mono" autocomplete="off">
+              <select id="blueprint-template">
+                <option value="startup-pitch">Startup Pitch</option>
+                <option value="architecture">Architecture</option>
+                <option value="freeform">Freeform</option>
+              </select>
+              <button type="button" class="toolbar-btn primary" id="blueprint-create">建立</button>
+              <button type="button" class="toolbar-btn" id="blueprint-cancel">取消</button>
+            </div>
+            <div class="blueprint-stage" id="blueprint-stage"></div>
+          </div>
+          <aside class="blueprint-stream">
+            <h2 class="blueprint-stream-title">Revision stream</h2>
+            <div class="blueprint-stream-list" id="blueprint-stream-list"></div>
+          </aside>
+        </div>
       </section>
       <section id="view-roadmap" class="view">
         <div class="roadmap" id="roadmap"></div>
@@ -309,6 +381,11 @@
   var EPICS = [];
   var PROJECTS = [];
   var ACTIVE_PROJECT = "__all__";
+  var BLUEPRINTS = [];
+  var ACTIVE_BLUEPRINT = "";
+  var BLUEPRINT_DOCUMENT = null;
+  var BLUEPRINT_EVENTS = [];
+  var blueprintEventSource = null;
   var openId = null;
   var currentView = "board";
 
@@ -370,9 +447,54 @@
       ? Promise.all(PROJECTS.map(function (project) { return api(projectPath(project.id, "/epics")); }))
           .then(function (groups) { return { epics: groups.reduce(function (all, group) { return all.concat(group.epics || []); }, []) }; })
       : api(projectPath(ACTIVE_PROJECT, "/epics"));
-    return Promise.all([cardsRequest, epicsRequest]).then(function (values) {
+    var blueprintsRequest = ACTIVE_PROJECT === "__all__"
+      ? Promise.resolve([])
+      : api(projectPath(ACTIVE_PROJECT, "/blueprints"));
+    return Promise.all([cardsRequest, epicsRequest, blueprintsRequest]).then(function (values) {
       TICKETS = values[0];
       EPICS = values[1].epics || [];
+      BLUEPRINTS = values[2];
+      if (!BLUEPRINTS.some(function (item) { return item.id === ACTIVE_BLUEPRINT; })) {
+        ACTIVE_BLUEPRINT = BLUEPRINTS.length ? BLUEPRINTS[0].id : "";
+      }
+      return loadActiveBlueprint();
+    });
+  }
+  function closeBlueprintStream() {
+    if (blueprintEventSource) blueprintEventSource.close();
+    blueprintEventSource = null;
+  }
+  function loadActiveBlueprint() {
+    closeBlueprintStream();
+    BLUEPRINT_EVENTS = [];
+    if (ACTIVE_PROJECT === "__all__" || !ACTIVE_BLUEPRINT) {
+      BLUEPRINT_DOCUMENT = null;
+      return Promise.resolve();
+    }
+    return api(projectPath(ACTIVE_PROJECT, "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT)))
+      .then(function (document) {
+        BLUEPRINT_DOCUMENT = document;
+        connectBlueprintStream();
+      });
+  }
+  function connectBlueprintStream() {
+    if (!BLUEPRINT_DOCUMENT || typeof EventSource === "undefined") return;
+    var url = projectPath(
+      ACTIVE_PROJECT,
+      "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT) + "/events?after=" + BLUEPRINT_DOCUMENT.revision
+    );
+    blueprintEventSource = new EventSource(url);
+    blueprintEventSource.addEventListener("blueprint-revision", function (event) {
+      var revision;
+      try { revision = JSON.parse(event.data); } catch (_) { return; }
+      BLUEPRINT_EVENTS.unshift(revision);
+      BLUEPRINT_EVENTS = BLUEPRINT_EVENTS.slice(0, 30);
+      api(projectPath(ACTIVE_PROJECT, "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT)))
+        .then(function (document) {
+          BLUEPRINT_DOCUMENT = document;
+          renderBlueprint();
+        })
+        .catch(function (err) { showToast("Blueprint 更新失敗：" + err.message, true); });
     });
   }
   function loadAll() {
@@ -539,7 +661,61 @@
         '建立 Epic 後，任務卡會在這裡顯示進度。</p>';
   }
 
-  function renderAll() { renderProjectControls(); renderLanes(); renderRoadmap(); }
+  function blueprintNodeHtml(node) {
+    var confidence = node.confidence === null || node.confidence === undefined
+      ? ""
+      : " · " + Math.round(node.confidence * 100) + "%";
+    return '<article class="blueprint-node' + (node.archived ? " is-archived" : "") + '" data-status="' + escapeHtml(node.status) + '">' +
+      '<div class="blueprint-node-head"><span class="blueprint-node-type">' + escapeHtml(node.type) + '</span>' +
+      '<span class="blueprint-node-status">' + escapeHtml(node.status) + confidence + '</span></div>' +
+      '<h3 class="blueprint-node-title">' + escapeHtml(node.title) + '</h3>' +
+      (node.body ? '<div class="blueprint-node-body">' + escapeHtml(node.body) + '</div>' : "") +
+      '<div class="blueprint-node-meta">' + escapeHtml(node.id) + ' · ' + escapeHtml(node.updatedBy || node.createdBy || "") + '</div></article>';
+  }
+
+  function renderBlueprint() {
+    var select = document.getElementById("blueprint-select");
+    select.innerHTML = BLUEPRINTS.length
+      ? BLUEPRINTS.map(function (item) {
+          return '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.title) + '</option>';
+        }).join("")
+      : '<option value="">No blueprints</option>';
+    select.value = ACTIVE_BLUEPRINT;
+    select.disabled = ACTIVE_PROJECT === "__all__" || !BLUEPRINTS.length;
+    document.getElementById("blueprint-add-toggle").disabled = ACTIVE_PROJECT === "__all__";
+    document.getElementById("blueprint-revision").textContent = BLUEPRINT_DOCUMENT
+      ? "REV " + BLUEPRINT_DOCUMENT.revision
+      : "REV 0";
+
+    var stage = document.getElementById("blueprint-stage");
+    if (ACTIVE_PROJECT === "__all__") {
+      stage.innerHTML = '<div class="blueprint-empty">請先選擇單一專案</div>';
+    } else if (!BLUEPRINT_DOCUMENT) {
+      stage.innerHTML = '<div class="blueprint-empty">尚無 Blueprint</div>';
+    } else {
+      var nodes = BLUEPRINT_DOCUMENT.nodes.map(blueprintNodeHtml).join("");
+      var titleById = {};
+      BLUEPRINT_DOCUMENT.nodes.forEach(function (node) { titleById[node.id] = node.title; });
+      var edges = BLUEPRINT_DOCUMENT.edges.map(function (edge) {
+        return '<div class="blueprint-edge' + (edge.archived ? " is-archived" : "") + '">' +
+          '<span>' + escapeHtml(titleById[edge.from] || edge.from) + '</span>' +
+          '<span class="blueprint-edge-relation">' + escapeHtml(edge.relation) + '</span>' +
+          '<span>' + escapeHtml(titleById[edge.to] || edge.to) + '</span></div>';
+      }).join("");
+      stage.innerHTML = (nodes ? '<div class="blueprint-grid">' + nodes + '</div>' : '<div class="blueprint-empty">等待第一個 revision</div>') +
+        (edges ? '<div class="blueprint-edges">' + edges + '</div>' : "");
+    }
+
+    document.getElementById("blueprint-stream-list").innerHTML = BLUEPRINT_EVENTS.length
+      ? BLUEPRINT_EVENTS.map(function (event) {
+          return '<div class="blueprint-event is-live"><div class="blueprint-event-meta">REV ' + event.revision + ' · ' +
+            escapeHtml(event.actor.id) + ' · ' + event.operations.length + ' OPS</div>' +
+            '<div class="blueprint-event-message">' + escapeHtml(event.message || "Blueprint updated") + '</div></div>';
+        }).join("")
+      : '<div class="blueprint-event"><div class="blueprint-event-meta">STREAM READY</div></div>';
+  }
+
+  function renderAll() { renderProjectControls(); renderLanes(); renderBlueprint(); renderRoadmap(); }
 
   function switchView(v) {
     currentView = v;
@@ -733,6 +909,45 @@
       showToast(API_TOKEN ? "Token 已套用" : "Token 已清除");
       return;
     }
+    if (e.target.id === "blueprint-add-toggle") {
+      document.getElementById("blueprint-create-form").hidden = false;
+      document.getElementById("blueprint-title").focus();
+      return;
+    }
+    if (e.target.id === "blueprint-cancel") {
+      document.getElementById("blueprint-create-form").hidden = true;
+      return;
+    }
+    if (e.target.id === "blueprint-create") {
+      var blueprintTitle = document.getElementById("blueprint-title").value.trim();
+      var blueprintId = document.getElementById("blueprint-id").value.trim().toLowerCase();
+      var blueprintTemplate = document.getElementById("blueprint-template").value;
+      if (!blueprintTitle || !blueprintId) { showToast("請填寫 Blueprint title 與 id", true); return; }
+      api(projectPath(ACTIVE_PROJECT, "/blueprints"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: blueprintId, title: blueprintTitle, template: blueprintTemplate })
+      }).then(function (blueprintDoc) {
+        BLUEPRINTS.push({
+          id: blueprintDoc.id,
+          project: blueprintDoc.project,
+          title: blueprintDoc.title,
+          template: blueprintDoc.template,
+          revision: blueprintDoc.revision,
+          updatedAt: blueprintDoc.updatedAt,
+          nodeCount: 0,
+          edgeCount: 0
+        });
+        ACTIVE_BLUEPRINT = blueprintDoc.id;
+        BLUEPRINT_DOCUMENT = blueprintDoc;
+        BLUEPRINT_EVENTS = [];
+        document.getElementById("blueprint-create-form").hidden = true;
+        connectBlueprintStream();
+        renderBlueprint();
+        showToast("Blueprint 已建立");
+      }).catch(function (err) { showToast("建立失敗：" + err.message, true); });
+      return;
+    }
     if (e.target.closest(".ticket-card")) { openModal(e.target.closest(".ticket-card").dataset.id); return; }
 
     var taskRow = e.target.closest(".task-row[data-open]");
@@ -808,6 +1023,14 @@
     if (e.key === "Escape" && !document.getElementById("modal-overlay").hidden) closeModal();
     if (e.key === "Enter" && e.target.id === "token-input") document.getElementById("token-apply").click();
   });
+
+  document.getElementById("blueprint-select").addEventListener("change", function (e) {
+    ACTIVE_BLUEPRINT = e.target.value;
+    loadActiveBlueprint().then(renderBlueprint)
+      .catch(function (err) { showToast("Blueprint 讀取失敗：" + err.message, true); });
+  });
+
+  window.addEventListener("beforeunload", closeBlueprintStream);
 
   loadAll().then(renderAll).catch(function (err) { showToast("讀取失敗：" + err.message, true); });
 })();

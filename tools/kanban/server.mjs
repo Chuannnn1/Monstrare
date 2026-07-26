@@ -8,7 +8,8 @@
  *   KANBAN_DATA_DIR  預設 server.mjs 所在目錄；放 projects.json 與 cards/
  *   KANBAN_AUTH_TOKEN 對外 bind 必填；保護所有寫入 API
  *   KANBAN_MAX_BODY_BYTES 預設 1048576
- * 資料：<DATA_DIR>/projects.json + cards/<projectId>/ + epics/<projectId>.json
+ * 資料：projects.json + cards/<projectId>/ + epics/<projectId>.json
+ *       + blueprints/<projectId>/<blueprintId>/
  *   （一卡一 JSON 檔；每張卡帶 project 欄位）
  */
 import http from 'node:http';
@@ -43,13 +44,17 @@ if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !AUTH_TOKEN) {
 const CARDS_DIR = path.join(DATA_DIR, 'cards');
 const PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
 const EPICS_DIR = path.join(DATA_DIR, 'epics');
+const BLUEPRINTS_DIR = path.join(DATA_DIR, 'blueprints');
 const INDEX_HTML = path.join(ROOT, 'index.html'); // 靜態資產隨程式碼走，不在 DATA_DIR
 
 fs.mkdirSync(CARDS_DIR, { recursive: true });
+fs.mkdirSync(BLUEPRINTS_DIR, { recursive: true });
 
 // 專案 id 與卡片 prefix 的格式
 const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const PREFIX_RE = /^[A-Z][A-Z0-9]*$/;
+const BLUEPRINT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+const ENTITY_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const cardIdRe = (prefix) => new RegExp('^' + prefix + '-\\d{3,}$');
 
 // 新卡片 owner 與看板留言作者的預設值：取本機 git 身分（這個看板本來就以
@@ -72,6 +77,19 @@ const READINESS_KEYS = [
 ];
 const GATE_KEYS = ['product', 'ui', 'architecture', 'security', 'test', 'code_review'];
 const LINK_KEYS = ['featureSpec', 'screenSpec', 'mockupDecision', 'taskCard', 'verificationReport', 'pr'];
+const BLUEPRINT_NODE_TYPES = [
+  'problem', 'customer', 'insight', 'solution', 'value', 'distribution',
+  'business-model', 'moat', 'risk', 'experiment', 'component', 'decision',
+  'task', 'note'
+];
+const BLUEPRINT_NODE_STATUSES = ['draft', 'fact', 'assumption', 'hypothesis', 'decision'];
+const BLUEPRINT_EDGE_RELATIONS = [
+  'supports', 'contradicts', 'depends-on', 'leads-to', 'validates', 'contains', 'related'
+];
+const BLUEPRINT_OPERATION_TYPES = [
+  'upsertNode', 'patchNode', 'archiveNode', 'upsertEdge', 'archiveEdge'
+];
+const blueprintStreams = new Map();
 
 /* ── helpers ── */
 
@@ -103,6 +121,13 @@ function readBody(req) {
 
 class InvalidBodyError extends Error {}
 class PayloadTooLargeError extends Error {}
+class ApiError extends Error {
+  constructor(status, message, extra = {}) {
+    super(message);
+    this.status = status;
+    this.extra = extra;
+  }
+}
 
 function parseBody(body) {
   try {
@@ -365,6 +390,328 @@ function todayStr() {
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }
 
+/* ── blueprints ── */
+
+function blueprintDir(project, blueprintId) {
+  return path.join(BLUEPRINTS_DIR, project.id, blueprintId);
+}
+
+function blueprintFile(project, blueprintId) {
+  return path.join(blueprintDir(project, blueprintId), 'blueprint.json');
+}
+
+function blueprintRevisionDir(project, blueprintId) {
+  return path.join(blueprintDir(project, blueprintId), 'revisions');
+}
+
+function readBlueprintEvents(project, blueprintId, afterRevision = -1) {
+  const dir = blueprintRevisionDir(project, blueprintId);
+  let files;
+  try {
+    files = fs.readdirSync(dir).filter((file) => /^\d{6}\.json$/.test(file)).sort();
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  return files
+    .map((file) => readJsonFile(path.join(dir, file), null))
+    .filter((event) => event && Number.isInteger(event.revision) && event.revision > afterRevision);
+}
+
+function readBlueprint(project, blueprintId) {
+  const current = readJsonFile(blueprintFile(project, blueprintId), null);
+  if (!current) return null;
+  const revisions = readBlueprintEvents(project, blueprintId, current.revision);
+  const latest = revisions.at(-1);
+  return latest && latest.document && latest.document.revision > current.revision
+    ? latest.document
+    : current;
+}
+
+function listBlueprints(project) {
+  const projectDir = path.join(BLUEPRINTS_DIR, project.id);
+  let entries;
+  try {
+    entries = fs.readdirSync(projectDir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && BLUEPRINT_ID_RE.test(entry.name))
+    .map((entry) => readBlueprint(project, entry.name))
+    .filter(Boolean)
+    .map((document) => ({
+      id: document.id,
+      project: document.project,
+      title: document.title,
+      template: document.template,
+      revision: document.revision,
+      updatedAt: document.updatedAt,
+      nodeCount: document.nodes.length,
+      edgeCount: document.edges.length,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function validateStringArray(value, field) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new ApiError(400, field + ' 必須是字串陣列');
+  }
+  return [...value];
+}
+
+function validateBlueprintLayout(value) {
+  if (value === undefined || value === null) return null;
+  if (!isPlainObject(value)) throw new ApiError(400, 'node.layout 必須是 object 或 null');
+  const layout = {};
+  for (const key of ['x', 'y', 'w', 'h']) {
+    if (!Number.isFinite(value[key])) throw new ApiError(400, `node.layout.${key} 必須是有限數字`);
+    layout[key] = value[key];
+  }
+  if (layout.w <= 0 || layout.h <= 0) throw new ApiError(400, 'node.layout.w/h 必須大於 0');
+  return layout;
+}
+
+function normalizeBlueprintNode(input, actorId, existing = null) {
+  if (!isPlainObject(input)) throw new ApiError(400, 'node 必須是 object');
+  if (typeof input.id !== 'string' || !ENTITY_ID_RE.test(input.id)) {
+    throw new ApiError(400, 'node.id 格式不合法');
+  }
+  if (!BLUEPRINT_NODE_TYPES.includes(input.type)) {
+    throw new ApiError(400, 'node.type 不支援：' + input.type);
+  }
+  if (typeof input.title !== 'string' || !input.title.trim()) {
+    throw new ApiError(400, 'node.title 必須是非空字串');
+  }
+  const status = input.status ?? existing?.status ?? 'draft';
+  if (!BLUEPRINT_NODE_STATUSES.includes(status)) {
+    throw new ApiError(400, 'node.status 不支援：' + status);
+  }
+  const confidence = Object.hasOwn(input, 'confidence')
+    ? input.confidence
+    : (existing?.confidence ?? null);
+  if (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)) {
+    throw new ApiError(400, 'node.confidence 必須是 0..1 或 null');
+  }
+  const body = input.body ?? existing?.body ?? '';
+  if (typeof body !== 'string') throw new ApiError(400, 'node.body 必須是字串');
+  return {
+    id: input.id,
+    type: input.type,
+    title: input.title.trim(),
+    body,
+    status,
+    confidence,
+    refs: validateStringArray(input.refs ?? existing?.refs, 'node.refs'),
+    linkedCardIds: validateStringArray(input.linkedCardIds ?? existing?.linkedCardIds, 'node.linkedCardIds'),
+    layout: validateBlueprintLayout(
+      Object.hasOwn(input, 'layout') ? input.layout : existing?.layout
+    ),
+    createdBy: existing?.createdBy || actorId,
+    updatedBy: actorId,
+    archived: input.archived ?? existing?.archived ?? false,
+  };
+}
+
+function normalizeBlueprintEdge(input, document, existing = null) {
+  if (!isPlainObject(input)) throw new ApiError(400, 'edge 必須是 object');
+  if (typeof input.id !== 'string' || !ENTITY_ID_RE.test(input.id)) {
+    throw new ApiError(400, 'edge.id 格式不合法');
+  }
+  if (typeof input.from !== 'string' || typeof input.to !== 'string') {
+    throw new ApiError(400, 'edge.from/to 必須是字串');
+  }
+  if (input.from === input.to) throw new ApiError(400, 'edge 不可連到自己');
+  if (!document.nodes.some((node) => node.id === input.from) || !document.nodes.some((node) => node.id === input.to)) {
+    throw new ApiError(400, 'edge.from/to 必須參照已存在 node');
+  }
+  if (!BLUEPRINT_EDGE_RELATIONS.includes(input.relation)) {
+    throw new ApiError(400, 'edge.relation 不支援：' + input.relation);
+  }
+  const label = input.label ?? existing?.label ?? '';
+  if (typeof label !== 'string') throw new ApiError(400, 'edge.label 必須是字串');
+  return {
+    id: input.id,
+    from: input.from,
+    to: input.to,
+    relation: input.relation,
+    label,
+    archived: input.archived ?? existing?.archived ?? false,
+  };
+}
+
+function applyBlueprintOperation(document, operation, actorId) {
+  if (!isPlainObject(operation) || !BLUEPRINT_OPERATION_TYPES.includes(operation.type)) {
+    throw new ApiError(400, 'operation.type 不支援');
+  }
+  if (operation.type === 'upsertNode') {
+    const existingIndex = document.nodes.findIndex((node) => node.id === operation.node?.id);
+    const existing = existingIndex >= 0 ? document.nodes[existingIndex] : null;
+    const normalized = normalizeBlueprintNode(operation.node, actorId, existing);
+    if (existingIndex >= 0) document.nodes[existingIndex] = normalized;
+    else document.nodes.push(normalized);
+    return;
+  }
+  if (operation.type === 'patchNode') {
+    const index = document.nodes.findIndex((node) => node.id === operation.nodeId);
+    if (index < 0) throw new ApiError(400, 'patchNode 找不到 node：' + operation.nodeId);
+    if (!isPlainObject(operation.changes)) throw new ApiError(400, 'patchNode.changes 必須是 object');
+    const allowed = new Set(['type', 'title', 'body', 'status', 'confidence', 'refs', 'linkedCardIds', 'layout']);
+    const invalid = Object.keys(operation.changes).filter((key) => !allowed.has(key));
+    if (invalid.length) throw new ApiError(400, 'patchNode 不允許欄位：' + invalid.join(', '));
+    const merged = { ...document.nodes[index], ...operation.changes, id: operation.nodeId };
+    document.nodes[index] = normalizeBlueprintNode(merged, actorId, document.nodes[index]);
+    return;
+  }
+  if (operation.type === 'archiveNode') {
+    const node = document.nodes.find((item) => item.id === operation.nodeId);
+    if (!node) throw new ApiError(400, 'archiveNode 找不到 node：' + operation.nodeId);
+    node.archived = true;
+    node.updatedBy = actorId;
+    return;
+  }
+  if (operation.type === 'upsertEdge') {
+    const existingIndex = document.edges.findIndex((edge) => edge.id === operation.edge?.id);
+    const existing = existingIndex >= 0 ? document.edges[existingIndex] : null;
+    const normalized = normalizeBlueprintEdge(operation.edge, document, existing);
+    if (existingIndex >= 0) document.edges[existingIndex] = normalized;
+    else document.edges.push(normalized);
+    return;
+  }
+  const edge = document.edges.find((item) => item.id === operation.edgeId);
+  if (!edge) throw new ApiError(400, 'archiveEdge 找不到 edge：' + operation.edgeId);
+  edge.archived = true;
+}
+
+function publicBlueprintEvent(storedEvent) {
+  const { document: _document, ...event } = storedEvent;
+  return event;
+}
+
+function streamKey(project, blueprintId) {
+  return project.id + '/' + blueprintId;
+}
+
+function writeBlueprintSse(res, event) {
+  res.write('event: blueprint-revision\n');
+  res.write('id: ' + event.revision + '\n');
+  res.write('data: ' + JSON.stringify(event) + '\n\n');
+}
+
+function broadcastBlueprintEvent(project, blueprintId, event) {
+  const clients = blueprintStreams.get(streamKey(project, blueprintId));
+  if (!clients) return;
+  for (const res of clients) writeBlueprintSse(res, event);
+}
+
+function handleCreateBlueprint(res, project, body) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const id = typeof input.id === 'string' ? input.id.trim() : '';
+  const title = typeof input.title === 'string' ? input.title.trim() : '';
+  const template = typeof input.template === 'string' ? input.template.trim() : '';
+  if (!BLUEPRINT_ID_RE.test(id)) throw new ApiError(400, 'blueprint id 格式不合法');
+  if (!title) throw new ApiError(400, 'title 必須是非空字串');
+  if (!template) throw new ApiError(400, 'template 必須是非空字串');
+  if (readBlueprint(project, id)) throw new ApiError(409, 'blueprint 已存在：' + id);
+  const now = new Date().toISOString();
+  const document = {
+    id,
+    project: project.id,
+    title,
+    template,
+    revision: 0,
+    createdAt: now,
+    updatedAt: now,
+    nodes: [],
+    edges: [],
+  };
+  atomicWriteJson(blueprintFile(project, id), document);
+  sendJson(res, 201, document);
+}
+
+function handleBlueprintOperations(res, project, blueprintId, body) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const current = readBlueprint(project, blueprintId);
+  if (!current) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+  if (!Number.isInteger(input.baseRevision) || input.baseRevision !== current.revision) {
+    throw new ApiError(409, 'baseRevision 已過期', { currentRevision: current.revision });
+  }
+  if (!isPlainObject(input.actor) || !['agent', 'human'].includes(input.actor.type)) {
+    throw new ApiError(400, 'actor.type 必須是 agent 或 human');
+  }
+  if (typeof input.actor.id !== 'string' || !ENTITY_ID_RE.test(input.actor.id)) {
+    throw new ApiError(400, 'actor.id 格式不合法');
+  }
+  if (!Array.isArray(input.operations) || input.operations.length < 1 || input.operations.length > 50) {
+    throw new ApiError(400, 'operations 必須包含 1..50 個操作');
+  }
+  if (input.message !== undefined && typeof input.message !== 'string') {
+    throw new ApiError(400, 'message 必須是字串');
+  }
+
+  const next = structuredClone(current);
+  for (const operation of input.operations) applyBlueprintOperation(next, operation, input.actor.id);
+  next.revision = current.revision + 1;
+  next.updatedAt = new Date().toISOString();
+  const storedEvent = {
+    revision: next.revision,
+    project: project.id,
+    blueprintId,
+    timestamp: next.updatedAt,
+    actor: {
+      type: input.actor.type,
+      id: input.actor.id,
+      ...(typeof input.actor.model === 'string' && input.actor.model ? { model: input.actor.model } : {}),
+    },
+    message: input.message || '',
+    operations: structuredClone(input.operations),
+    document: next,
+  };
+  const revisionFile = path.join(
+    blueprintRevisionDir(project, blueprintId),
+    String(next.revision).padStart(6, '0') + '.json'
+  );
+  atomicWriteJson(revisionFile, storedEvent);
+  atomicWriteJson(blueprintFile(project, blueprintId), next);
+  const event = publicBlueprintEvent(storedEvent);
+  broadcastBlueprintEvent(project, blueprintId, event);
+  sendJson(res, 200, { document: next, event });
+}
+
+function handleBlueprintEvents(req, res, project, blueprintId, searchParams) {
+  const document = readBlueprint(project, blueprintId);
+  if (!document) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+  const rawAfter = searchParams.get('after') || '0';
+  const after = Number(rawAfter);
+  if (!Number.isInteger(after) || after < 0) throw new ApiError(400, 'after 必須是非負整數');
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  });
+  res.write(': connected\n\n');
+  for (const storedEvent of readBlueprintEvents(project, blueprintId, after)) {
+    writeBlueprintSse(res, publicBlueprintEvent(storedEvent));
+  }
+
+  const key = streamKey(project, blueprintId);
+  if (!blueprintStreams.has(key)) blueprintStreams.set(key, new Set());
+  const clients = blueprintStreams.get(key);
+  clients.add(res);
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+  heartbeat.unref();
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    clients.delete(res);
+    if (!clients.size) blueprintStreams.delete(key);
+  });
+}
+
 /* ── route handlers ── */
 
 function handleEpics(res, project) {
@@ -491,7 +838,8 @@ function handleDelete(res, project, id) {
 /* ── server ── */
 
 const server = http.createServer(async (req, res) => {
-  const pathname = (req.url || '/').split('?')[0];
+  const requestUrl = new URL(req.url || '/', 'http://localhost');
+  const pathname = requestUrl.pathname;
   try {
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -524,6 +872,41 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/projects') {
       if (req.method === 'GET') return sendJson(res, 200, readProjects());
       if (req.method === 'POST') return handleCreateProject(res, await readBody(req));
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const bm = pathname.match(/^\/api\/projects\/([^/]+)\/blueprints(?:\/([^/]+))?(?:\/(operations|events))?$/);
+    if (bm) {
+      const pid = decodeURIComponent(bm[1]);
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      const blueprintId = bm[2] ? decodeURIComponent(bm[2]) : null;
+      const action = bm[3] || null;
+
+      if (!blueprintId) {
+        if (req.method === 'GET') return sendJson(res, 200, listBlueprints(project));
+        if (req.method === 'POST') return handleCreateBlueprint(res, project, await readBody(req));
+        return sendJson(res, 405, { error: 'method not allowed' });
+      }
+      if (!BLUEPRINT_ID_RE.test(blueprintId)) throw new ApiError(400, 'blueprint id 格式不合法');
+
+      if (action === 'operations') {
+        if (req.method === 'POST') {
+          return handleBlueprintOperations(res, project, blueprintId, await readBody(req));
+        }
+        return sendJson(res, 405, { error: 'method not allowed' });
+      }
+      if (action === 'events') {
+        if (req.method === 'GET') {
+          return handleBlueprintEvents(req, res, project, blueprintId, requestUrl.searchParams);
+        }
+        return sendJson(res, 405, { error: 'method not allowed' });
+      }
+      if (req.method === 'GET') {
+        const document = readBlueprint(project, blueprintId);
+        if (!document) throw new ApiError(404, 'blueprint 不存在：' + blueprintId);
+        return sendJson(res, 200, document);
+      }
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 
@@ -562,7 +945,9 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { error: 'not found' });
   } catch (err) {
-    if (err instanceof InvalidBodyError) {
+    if (err instanceof ApiError) {
+      sendJson(res, err.status, { error: err.message, ...err.extra });
+    } else if (err instanceof InvalidBodyError) {
       sendJson(res, 400, { error: 'body 不是合法 JSON：' + err.message });
     } else if (err instanceof PayloadTooLargeError) {
       sendJson(res, 413, { error: `request body 超過 ${MAX_BODY_BYTES} bytes` });

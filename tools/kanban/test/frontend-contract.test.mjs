@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1] || '';
+const blueprintCanvas = readFileSync(new URL('../blueprint-canvas.jsx', import.meta.url), 'utf8');
 
 test('frontend inline script 可編譯，且包含 sidebar project/token controls', () => {
   assert.doesNotThrow(() => new Function(script));
@@ -24,6 +25,23 @@ test('frontend 使用 neutral dark-tech palette 與 responsive sidebar', () => {
   assert.match(html, /Segoe UI Variable Text/);
   assert.match(html, /@media \(max-width: 760px\)/);
   assert.doesNotMatch(html, /linear-gradient/);
+});
+
+test('typography 使用可讀字級、繁中 fallback 與高對比 secondary text', () => {
+  assert.match(html, /--ink-dim: #b5bec8/);
+  assert.match(html, /--ink-faint: #7f8b99/);
+  assert.match(html, /Microsoft JhengHei UI/);
+  assert.match(html, /\.ticket-title \{ font-size: 15px/);
+  assert.match(html, /\.blueprint-panel-title \{ font-size: 14px/);
+  assert.match(html, /font-synthesis: none/);
+  assert.doesNotMatch(html, /-webkit-font-smoothing:\s*antialiased/);
+});
+
+test('Blueprint canvas 放大語意節點文字，窄畫面優先聚焦單一節點', () => {
+  assert.match(blueprintCanvas, /fontSize: 21/);
+  assert.match(blueprintCanvas, /rootElement\.clientWidth < 600/);
+  assert.match(blueprintCanvas, /nodeElements\.slice\(0, 1\)/);
+  assert.match(blueprintCanvas, /viewportZoomFactor: compact \? 0\.9 : 0\.96/);
 });
 
 test('frontend writes 使用 project-scoped API，不再呼叫 legacy global endpoints', () => {

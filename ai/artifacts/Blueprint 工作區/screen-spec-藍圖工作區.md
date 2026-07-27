@@ -28,7 +28,7 @@
 | 錯誤 | toast 顯示 API 錯誤，不覆蓋工作內容 | 使用 server 回傳訊息 | API / Browser |
 | 停用 | 未選 task/experiment 時停用「轉成任務卡」 | 不額外顯示教學文字 | Browser |
 | 權限不足 | 寫入 API 回 `401`，UI 顯示錯誤 toast | `缺少或無效的 bearer token` | API test |
-| 行動裝置版 | project rail 可橫向切換；toolbar 44px；inspector 下移 | 與桌面共用文案 | 390x844 截圖 |
+| 行動裝置版 | project rail 可橫向切換；toolbar 44px；canvas 先聚焦單一節點；inspector 下移 | 與桌面共用文案 | 390x844 截圖 |
 
 ## 互動
 
@@ -52,5 +52,6 @@
 
 - 1440px 桌面可同時看到 project nav、canvas 與 inspector。
 - 390px 手機沒有橫向頁面 overflow；project rail、主要 tabs 與 Blueprint toolbar 不重疊。
+- Canvas desktop 初始 framing 約 80% zoom；mobile 優先讓單一節點文字可讀，不強制塞入全圖。
 - Kanban lane 在桌面固定 282px，手機為 86vw，卡片標題與 metadata 保有間距。
 - 介面使用自然、任務導向的繁體中文，不放模板式英文 eyebrow 或功能自述。

@@ -17,7 +17,8 @@
 
 - 選定的 style tile：Dark Operations
 - 色彩情緒：接近黑色的中性底色，cyan 作主要互動提示，綠／黃／紅只表達狀態。
-- 字體個性：系統 UI 字體，短標籤清楚、長內容可讀；不使用裝飾性 display font。
+- 字體個性：Segoe UI Variable Text 搭配 Microsoft JhengHei UI 繁中 fallback；
+  不合成缺少的字重，短標籤清楚、長內容可讀。
 - 圓角／陰影傾向：4-8px 小圓角、細邊界；陰影只用在可互動卡片 hover 與 modal。
 - 密度：舒適但可掃讀；Kanban lane 固定 282px，卡片內距 14-17px。
 - 亮／暗模式：暗色模式。
@@ -31,9 +32,9 @@
 | 類別 | Token | 值 | 備註 |
 |---|---|---|---|
 | 色彩 | paper / surface / raised / sunken | `#090b0e` / `#11151a` / `#171c22` / `#0c1014` | 四層中性背景 |
-| 色彩 | ink / ink-dim / ink-faint | `#e8edf3` / `#9ba6b3` / `#66717e` | 三層文字 |
+| 色彩 | ink / ink-dim / ink-faint | `#e8edf3` / `#b5bec8` / `#7f8b99` | 三層文字；暗色底維持可讀對比 |
 | 色彩 | accent / good / warn / crit | `#42c7d5` / `#45d29a` / `#e2aa43` / `#f06870` | 動作與語意狀態 |
-| 字級 | type scale | `10, 11, 12, 13, 16, 18px` | 介面文字，不隨 viewport 縮放 |
+| 字級 | type scale | `11, 12, 13, 14, 15, 16, 18, 21px` | DOM 不低於 11px；canvas node 21px |
 | 字重／行高 | regular / semibold / bold | `400 / 600 / 700`; 內文 `1.5-1.6` | |
 | 間距 | spacing scale | `4, 8, 12, 16, 20, 24, 32px` | 以 4px 為基準 |
 | 圓角 | radius | `4, 6, 8px`; pill `999px` | panel 不做浮動大圓角 |

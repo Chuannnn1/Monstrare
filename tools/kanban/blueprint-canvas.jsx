@@ -35,7 +35,7 @@ const STATUS_COLORS = {
 function defaultLayout(index) {
   const column = index % 3;
   const row = Math.floor(index / 3);
-  return { x: 80 + column * 360, y: 80 + row * 240, w: 280, h: 152 };
+  return { x: 80 + column * 390, y: 80 + row * 260, w: 300, h: 168 };
 }
 
 function nodeElementId(nodeId) {
@@ -51,7 +51,7 @@ function documentToElements(document) {
     const layout = node.layout || defaultLayout(index);
     layoutById.set(node.id, layout);
     const colors = STATUS_COLORS[node.status] || STATUS_COLORS.draft;
-    const body = node.body ? "\n\n" + node.body.slice(0, 180) : "";
+    const body = node.body ? "\n\n" + node.body.slice(0, 120) : "";
     return {
       id: nodeElementId(node.id),
       type: "rectangle",
@@ -67,7 +67,7 @@ function documentToElements(document) {
       roundness: { type: 3 },
       label: {
         text: (TYPE_LABELS[node.type] || node.type) + "  " + node.title + body,
-        fontSize: 18,
+        fontSize: 21,
         fontFamily: 2,
         textAlign: "left",
         verticalAlign: "top",
@@ -87,7 +87,7 @@ function documentToElements(document) {
       x,
       y,
       points: [[0, 0], [to.x - x, to.y + to.h / 2 - y]],
-      strokeColor: "#9ba6b3",
+      strokeColor: "#b5bec8",
       strokeWidth: 2,
       roughness: 1,
       startBinding: { elementId: nodeElementId(edge.from), focus: 0, gap: 8 },
@@ -112,12 +112,19 @@ function BlueprintCanvas() {
 
   function fitScene(nextElements = elements) {
     if (!apiRef.current || !nextElements.length) return;
+    const nodeElements = nextElements.filter(
+      (element) => element.type === "rectangle" && element.id.startsWith("bp_node_"),
+    );
+    const compact = rootElement.clientWidth < 600;
+    const focusElements = compact && nodeElements.length
+      ? nodeElements.slice(0, 1)
+      : nextElements;
     apiRef.current.updateScene({
       appState: { theme: "dark", viewBackgroundColor: "#0c1014", zenModeEnabled: true },
     });
-    apiRef.current.scrollToContent(nextElements, {
+    apiRef.current.scrollToContent(focusElements, {
       fitToViewport: true,
-      viewportZoomFactor: 0.82,
+      viewportZoomFactor: compact ? 0.9 : 0.96,
       animate: false,
     });
   }

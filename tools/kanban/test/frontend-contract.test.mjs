@@ -57,7 +57,9 @@ test('Blueprint view 使用 project-scoped documents 與 SSE revision stream', (
   assert.match(html, /id="blueprint-stage"/);
   assert.match(html, /id="blueprint-stream-list"/);
   assert.match(script, /projectPath\(ACTIVE_PROJECT, "\/blueprints"\)/);
-  assert.match(script, /new EventSource\(url\)/);
+  assert.match(script, /fetch\(url, \{ headers: headers, signal: controller\.signal \}\)/);
+  assert.match(script, /headers\.Authorization = "Bearer " \+ API_TOKEN/);
+  assert.match(script, /TextDecoder/);
   assert.match(script, /blueprint-revision/);
   assert.match(html, /data-view="roadmap" role="tab">路線圖/);
 });
@@ -87,6 +89,21 @@ test('agent proposal 可先投影到 Excalidraw，preview 不得寫回正式 lay
   assert.match(blueprintCanvas, /strokeStyle: isPreview \? "dashed" : "solid"/);
   assert.match(blueprintCanvas, /isPreviewRef\.current/);
   assert.match(blueprintCanvas, /if \(isPreviewRef\.current\) return/);
+});
+
+test('Kanban 顯示 distributed claim lease、submission 與獨立 reviewer 狀態', () => {
+  assert.match(html, /\.coordination-pill/);
+  assert.match(script, /function coordinationLabel/);
+  assert.match(script, /review_pending/);
+  assert.match(script, /changes_requested/);
+  assert.match(script, /coordination\.reviews/);
+  assert.match(script, /leaseExpiresAt/);
+});
+
+test('read auth 部署先顯示 token control，套用 token 後重新載入 protected data', () => {
+  assert.match(script, /return api\("\/api\/config"\)\.then/);
+  assert.match(script, /if \(AUTH_REQUIRED && !API_TOKEN\)/);
+  assert.match(script, /loadAll\(\)\.then\(renderAll\)/);
 });
 
 test('介面文案避免混用舊版 AI workflow 樣板字詞', () => {

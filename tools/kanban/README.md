@@ -85,15 +85,24 @@ npm run kanban
 
 | Method | Path | 說明 |
 | --- | --- | --- |
-| `GET` | `/api/config` | 看板設定（目前只有 `owner`：本機 `git config user.name`，作為新卡 owner 與留言作者的預設值） |
-| `GET` | `/api/epics` | 讀取 [`epics.json`](epics.json)（Epic → User Story 定義，唯讀，沒有寫入 API，要改就直接編輯檔案） |
-| `GET` | `/api/cards` | 全部卡片（陣列） |
-| `PUT` | `/api/cards/:id` | 覆寫單卡（body 為完整 card） |
-| `PUT` | `/api/cards` | bulk 覆寫（body 為陣列，拖曳排序用） |
-| `POST` | `/api/cards` | 新增卡（server 配下一個流水號） |
-| `DELETE` | `/api/cards/:id` | 刪卡（刪檔） |
+| `GET` | `/api/config` | auth / claim TTL / owner 等公開 client 設定 |
+| `GET` | `/api/health` | server 與 persistent data store readiness |
+| `GET` | `/api/identity` | bearer token 對應的 identity / roles |
+| `GET/POST` | `/api/projects` | 讀取／建立專案 |
+| `GET` | `/api/cards` | 跨專案聚合卡片 |
+| `GET/POST/PUT` | `/api/projects/:pid/cards` | project-scoped 卡片清單／新增／bulk update |
+| `PUT/DELETE` | `/api/projects/:pid/cards/:id` | 覆寫／刪除單卡 |
+| `GET/PUT` | `/api/projects/:pid/epics` | project-scoped Roadmap |
+| `POST` | `/api/projects/:pid/claims/next` | worker 原子認領下一張 ready card |
+| `POST` | `/api/projects/:pid/cards/:id/claim` | worker 認領指定 card |
+| `POST` | `/api/projects/:pid/cards/:id/heartbeat` | claim owner 延長 lease |
+| `POST` | `/api/projects/:pid/cards/:id/release` | claim owner 主動釋放 |
+| `POST` | `/api/projects/:pid/cards/:id/submit` | worker 提交 git revision 與 checks |
+| `POST` | `/api/projects/:pid/cards/:id/review` | 不同 reviewer approve / changes requested |
 
 非法 id / stage / risk 格式一律回 400；PUT/POST body 缺少物件型欄位時由 server 補預設值。
+Identity、lease、submission 與 reviewer contract 詳見
+[`docs/agent-coordination-design.md`](docs/agent-coordination-design.md)。
 
 ### dependsOn 硬防呆
 
@@ -107,9 +116,10 @@ npm run kanban
 
 刪除卡片不會自動清除其他卡對它的 `dependsOn` 參照；看板 UI 讀到參照不存在的 id 時會顯示警示，但不會擋任何操作。
 
-## 已知限制（v1）
+## 已知限制
 
-- 沒有帳號系統，身分只取自本機 git 設定，無法區分同名使用者、也沒有權限控管。
+- File store 只允許單一 server writer；不能把 Deployment scale 到多 replica。
+- Review checks 是 authenticated reviewer attestation，尚不是 server-managed sandbox provenance。
+- Card 與 coordination 各自 atomic write，但跨兩個檔案不是 database transaction。
 - `content` / 留言不支援 markdown 渲染，純文字顯示。
-- 沒有多人即時協作（沒有 WebSocket），要靠重新整理頁面看到別人 git pull 後的異動。
-- 手機版尚未特別優化（多欄橫向捲動在小螢幕會更明顯），對應 `screen-spec.md` 的 Mobile 狀態尚待處理。
+- Card lanes 尚未提供 SSE；其他 agent 更新後需重新整理。Blueprint revisions 已支援 authenticated SSE。

@@ -7,6 +7,9 @@
  *   KANBAN_PORT      預設 4420
  *   KANBAN_DATA_DIR  預設 server.mjs 所在目錄；放 projects.json 與 cards/
  *   KANBAN_AUTH_TOKEN 對外 bind 必填；保護所有寫入 API
+ *   KANBAN_IDENTITIES_JSON agent identity/token/roles 陣列
+ *   KANBAN_CLAIM_TTL_SECONDS claim lease 秒數，預設 900
+ *   KANBAN_REQUIRE_READ_AUTH 部署時設 true，保護 GET API（health/config 除外）
  *   KANBAN_MAX_BODY_BYTES 預設 1048576
  * 資料：projects.json + cards/<projectId>/ + epics/<projectId>.json
  *       + blueprints/<projectId>/<blueprintId>/
@@ -31,20 +34,69 @@ const PORT = (() => {
 })();
 const DATA_DIR = process.env.KANBAN_DATA_DIR || ROOT;
 const AUTH_TOKEN = process.env.KANBAN_AUTH_TOKEN || '';
+const IDENTITY_ROLES = ['worker', 'reviewer'];
+const AUTH_IDENTITIES = (() => {
+  let list;
+  try {
+    list = JSON.parse(process.env.KANBAN_IDENTITIES_JSON || '[]');
+  } catch (err) {
+    throw new Error('KANBAN_IDENTITIES_JSON 不是合法 JSON：' + err.message);
+  }
+  if (!Array.isArray(list)) throw new Error('KANBAN_IDENTITIES_JSON 必須是陣列');
+  const ids = new Set();
+  const tokens = new Set(AUTH_TOKEN ? [AUTH_TOKEN] : []);
+  return list.map((item) => {
+    if (
+      !item || typeof item !== 'object' || Array.isArray(item) ||
+      typeof item.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(item.id)
+    ) {
+      throw new Error('KANBAN_IDENTITIES_JSON identity.id 格式不合法');
+    }
+    if (typeof item.token !== 'string' || item.token.length < 16) {
+      throw new Error('KANBAN_IDENTITIES_JSON identity.token 至少需要 16 字元');
+    }
+    if (
+      !Array.isArray(item.roles) || item.roles.length === 0 ||
+      item.roles.some((role) => !IDENTITY_ROLES.includes(role))
+    ) {
+      throw new Error('KANBAN_IDENTITIES_JSON identity.roles 只允許 worker/reviewer');
+    }
+    if (ids.has(item.id)) throw new Error('KANBAN_IDENTITIES_JSON identity.id 不可重複：' + item.id);
+    if (tokens.has(item.token)) throw new Error('KANBAN_IDENTITIES_JSON token 不可重複');
+    ids.add(item.id);
+    tokens.add(item.token);
+    return { id: item.id, token: item.token, roles: [...new Set(item.roles)] };
+  });
+})();
+const CLAIM_TTL_SECONDS = (() => {
+  const value = Number(process.env.KANBAN_CLAIM_TTL_SECONDS || 900);
+  if (!Number.isInteger(value) || value < 1 || value > 86400) {
+    throw new Error('KANBAN_CLAIM_TTL_SECONDS 必須是 1 到 86400 的整數');
+  }
+  return value;
+})();
+const REQUIRE_READ_AUTH = (() => {
+  const value = process.env.KANBAN_REQUIRE_READ_AUTH || 'false';
+  if (!['true', 'false'].includes(value)) {
+    throw new Error('KANBAN_REQUIRE_READ_AUTH 只允許 true/false');
+  }
+  return value === 'true';
+})();
 const MAX_BODY_BYTES = (() => {
   const value = Number(process.env.KANBAN_MAX_BODY_BYTES || 1024 * 1024);
   if (!Number.isInteger(value) || value < 1) throw new Error('KANBAN_MAX_BODY_BYTES 必須是正整數');
   return value;
 })();
 
-if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !AUTH_TOKEN) {
-  throw new Error('非 loopback KANBAN_HOST 必須設定 KANBAN_AUTH_TOKEN');
+if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !AUTH_TOKEN && AUTH_IDENTITIES.length === 0) {
+  throw new Error('非 loopback KANBAN_HOST 必須設定 KANBAN_AUTH_TOKEN 或 KANBAN_IDENTITIES_JSON');
 }
 
 const CARDS_DIR = path.join(DATA_DIR, 'cards');
 const PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
 const EPICS_DIR = path.join(DATA_DIR, 'epics');
 const BLUEPRINTS_DIR = path.join(DATA_DIR, 'blueprints');
+const COORDINATION_DIR = path.join(DATA_DIR, 'coordination');
 const INDEX_HTML = path.join(ROOT, 'index.html'); // 靜態資產隨程式碼走，不在 DATA_DIR
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const EXCALIDRAW_ASSETS_DIR = path.resolve(
@@ -54,6 +106,7 @@ const EXCALIDRAW_ASSETS_DIR = path.resolve(
 
 fs.mkdirSync(CARDS_DIR, { recursive: true });
 fs.mkdirSync(BLUEPRINTS_DIR, { recursive: true });
+fs.mkdirSync(COORDINATION_DIR, { recursive: true });
 
 // 專案 id 與卡片 prefix 的格式
 const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -184,13 +237,39 @@ function parseBody(body) {
   }
 }
 
-function hasValidBearerToken(req) {
-  if (!AUTH_TOKEN) return true;
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) return false;
-  const supplied = Buffer.from(header.slice(7));
-  const expected = Buffer.from(AUTH_TOKEN);
+function tokenMatches(suppliedToken, expectedToken) {
+  const supplied = Buffer.from(suppliedToken);
+  const expected = Buffer.from(expectedToken);
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+function authenticateRequest(req) {
+  if (!AUTH_TOKEN && AUTH_IDENTITIES.length === 0) {
+    return { id: 'local-admin', type: 'human', roles: ['admin', 'worker', 'reviewer'] };
+  }
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return null;
+  const supplied = header.slice(7);
+  if (AUTH_TOKEN && tokenMatches(supplied, AUTH_TOKEN)) {
+    return { id: 'admin', type: 'human', roles: ['admin', 'worker', 'reviewer'] };
+  }
+  const identity = AUTH_IDENTITIES.find((item) => tokenMatches(supplied, item.token));
+  return identity
+    ? { id: identity.id, type: 'agent', roles: [...identity.roles] }
+    : null;
+}
+
+function requireRole(principal, role) {
+  if (!principal || (!principal.roles.includes(role) && !principal.roles.includes('admin'))) {
+    throw new ApiError(403, '此操作需要 ' + role + ' role');
+  }
+}
+
+function isAgentCoordinationWrite(pathname) {
+  return (
+    /^\/api\/projects\/[^/]+\/claims\/next$/.test(pathname) ||
+    /^\/api\/projects\/[^/]+\/cards\/[^/]+\/(claim|heartbeat|release|submit|review)$/.test(pathname)
+  );
 }
 
 function isPlainObject(v) {
@@ -351,6 +430,87 @@ function getProject(pid) {
   return readProjects().find((p) => p.id === pid) || null;
 }
 
+function coordinationFile(project, cardId) {
+  return path.join(COORDINATION_DIR, project.id, cardId + '.json');
+}
+
+function emptyCoordination() {
+  return {
+    version: 1,
+    state: 'available',
+    claim: null,
+    submission: null,
+    reviews: [],
+    events: [],
+  };
+}
+
+function readCoordination(project, cardId) {
+  const coordination = readJsonFile(coordinationFile(project, cardId), null);
+  if (coordination === null) return emptyCoordination();
+  if (
+    !isPlainObject(coordination) || coordination.version !== 1 ||
+    typeof coordination.state !== 'string' ||
+    !Array.isArray(coordination.reviews) || !Array.isArray(coordination.events)
+  ) {
+    throw new Error(cardId + ' coordination 格式不合法');
+  }
+  return coordination;
+}
+
+function writeCoordination(project, cardId, coordination) {
+  atomicWriteJson(coordinationFile(project, cardId), coordination);
+}
+
+function isClaimExpired(claim, now = Date.now()) {
+  return !claim || !Number.isFinite(Date.parse(claim.expiresAt)) || Date.parse(claim.expiresAt) <= now;
+}
+
+function coordinationView(coordination, now = Date.now()) {
+  const view = structuredClone(coordination);
+  if (view.state === 'claimed' && isClaimExpired(view.claim, now)) {
+    view.state = 'available';
+    view.leaseExpired = true;
+  } else {
+    view.leaseExpired = false;
+  }
+  return view;
+}
+
+function addCoordinationEvent(coordination, type, principal, details = {}) {
+  coordination.events.push({
+    id: randomUUID(),
+    type,
+    actor: { id: principal.id, type: principal.type },
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
+
+function validateChecks(value, { requireSuccess = false } = {}) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 50) {
+    throw new ApiError(400, 'checks 必須是 1 到 50 項的陣列');
+  }
+  const checks = value.map((item) => {
+    if (
+      !isPlainObject(item) || typeof item.command !== 'string' || !item.command.trim() ||
+      item.command.length > 500 || !Number.isInteger(item.exitCode) ||
+      typeof item.summary !== 'string' || item.summary.length > 2000
+    ) {
+      throw new ApiError(400, 'checks 每項必須包含 command、integer exitCode 與 summary');
+    }
+    return {
+      command: item.command.trim(),
+      exitCode: item.exitCode,
+      summary: item.summary,
+    };
+  });
+  if (requireSuccess && checks.some((check) => check.exitCode !== 0)) {
+    throw new ApiError(400, '提交或批准所附 checks 必須全部 exitCode 0');
+  }
+  return checks;
+}
+
 /** 讀單一專案的卡片，排序後回傳；project 欄位以目錄為準（權威來源） */
 function readProjectCards(project) {
   const dir = path.join(CARDS_DIR, project.id);
@@ -364,6 +524,7 @@ function readProjectCards(project) {
   const cards = files.map((f) => {
     const c = fillDefaults(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
     c.project = project.id;
+    c.coordination = coordinationView(readCoordination(project, c.id));
     return c;
   });
   cards.sort((a, b) =>
@@ -1053,21 +1214,262 @@ function handlePutBulk(res, project, body) {
   sendJson(res, 200, { updated: list.length });
 }
 
-function handleClaimCard(res, project, id, body) {
-  const input = parseBody(body);
-  if (!isPlainObject(input) || typeof input.agent !== 'string' || !input.agent.trim()) {
-    throw new ApiError(400, 'agent 必須是非空字串');
-  }
-  const agent = input.agent.trim();
-  if (agent.length > 100) throw new ApiError(400, 'agent 最多 100 字元');
+function getProjectCard(project, id) {
   const card = readProjectCards(project).find((item) => item.id === id);
   if (!card) throw new ApiError(404, id + ' 不存在');
-  if (card.agent && card.agent !== agent) {
-    throw new ApiError(409, id + ' 已被其他 agent 認領', { claimedBy: card.agent });
+  return card;
+}
+
+function resolveWorkerId(principal, input) {
+  requireRole(principal, 'worker');
+  if (principal.type === 'agent') {
+    if (typeof input.agent === 'string' && input.agent.trim() && input.agent.trim() !== principal.id) {
+      throw new ApiError(403, 'agent identity 由 bearer token 決定，不可冒用其他 agent');
+    }
+    return principal.id;
   }
-  card.agent = agent;
+  const requested = typeof input.agent === 'string' ? input.agent.trim() : '';
+  const agentId = requested || principal.id;
+  if (!ENTITY_ID_RE.test(agentId)) throw new ApiError(400, 'agent 必須是有效 identity id');
+  return agentId;
+}
+
+function claimCardRecord(project, card, agentId, principal) {
+  if (card.stage === 'done' || card.stage === 'blocked') {
+    throw new ApiError(409, card.id + ' 在 ' + card.stage + ' 階段，無法認領');
+  }
+  const coordination = readCoordination(project, card.id);
+  const activeClaim = coordination.state === 'claimed' && !isClaimExpired(coordination.claim);
+  if (activeClaim) {
+    if (coordination.claim.agentId === agentId) return getProjectCard(project, card.id);
+    throw new ApiError(409, card.id + ' 已被其他 agent 認領', {
+      claimedBy: coordination.claim.agentId,
+      leaseExpiresAt: coordination.claim.expiresAt,
+    });
+  }
+  const expiredClaim = coordination.state === 'claimed' && isClaimExpired(coordination.claim);
+  if (
+    card.agent && card.agent !== agentId && !expiredClaim &&
+    coordination.state !== 'available'
+  ) {
+    throw new ApiError(409, card.id + ' 已指派給其他 agent', { claimedBy: card.agent });
+  }
+  if (
+    card.agent && card.agent !== agentId &&
+    coordination.events.length === 0
+  ) {
+    throw new ApiError(409, card.id + ' 是 legacy assignment，需由原 agent 或 admin 接管', {
+      claimedBy: card.agent,
+      legacyAssignment: true,
+    });
+  }
+
+  const now = new Date();
+  const claim = {
+    id: randomUUID(),
+    agentId,
+    claimedAt: now.toISOString(),
+    heartbeatAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + CLAIM_TTL_SECONDS * 1000).toISOString(),
+  };
+  coordination.state = 'claimed';
+  coordination.claim = claim;
+  addCoordinationEvent(coordination, expiredClaim ? 'claim-taken-over' : 'claimed', principal, {
+    claimId: claim.id,
+    agentId,
+  });
+  writeCoordination(project, card.id, coordination);
+  card.agent = agentId;
+  if (card.stage === 'ready') card.stage = 'implementing';
   writeCard(card, project.id);
-  sendJson(res, 200, card);
+  return getProjectCard(project, card.id);
+}
+
+function handleClaimCard(res, project, id, body, principal) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const agentId = resolveWorkerId(principal, input);
+  sendJson(res, 200, claimCardRecord(project, getProjectCard(project, id), agentId, principal));
+}
+
+function handleClaimNext(res, project, body, principal) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const agentId = resolveWorkerId(principal, input);
+  const tracks = input.tracks === undefined ? null : input.tracks;
+  if (tracks !== null && (!Array.isArray(tracks) || tracks.some((track) => !TRACKS.includes(track)))) {
+    throw new ApiError(400, 'tracks 必須是有效 track 陣列');
+  }
+  const card = readProjectCards(project).find((item) => {
+    if (item.stage !== 'ready') return false;
+    if (tracks && !tracks.includes(item.track)) return false;
+    const coordination = readCoordination(project, item.id);
+    if (coordination.state === 'claimed' && !isClaimExpired(coordination.claim)) return false;
+    if (item.agent && coordination.events.length === 0) return false;
+    return !['review_pending', 'approved'].includes(coordination.state);
+  });
+  if (!card) throw new ApiError(404, '目前沒有可認領的 ready card');
+  sendJson(res, 200, claimCardRecord(project, card, agentId, principal));
+}
+
+function requireOwnedActiveClaim(project, card, input, principal) {
+  requireRole(principal, 'worker');
+  if (principal.type !== 'agent' && !principal.roles.includes('admin')) {
+    throw new ApiError(403, 'claim 操作需要 agent 或 admin identity');
+  }
+  const coordination = readCoordination(project, card.id);
+  if (
+    coordination.state !== 'claimed' || !coordination.claim ||
+    typeof input.claimId !== 'string' || input.claimId !== coordination.claim.id
+  ) {
+    throw new ApiError(409, 'claimId 不是目前有效 claim');
+  }
+  if (isClaimExpired(coordination.claim)) {
+    throw new ApiError(409, 'claim lease 已過期', { leaseExpiresAt: coordination.claim.expiresAt });
+  }
+  if (!principal.roles.includes('admin') && coordination.claim.agentId !== principal.id) {
+    throw new ApiError(403, '只有 claim owner 可以執行此操作');
+  }
+  return coordination;
+}
+
+function handleHeartbeatCard(res, project, id, body, principal) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const card = getProjectCard(project, id);
+  const coordination = requireOwnedActiveClaim(project, card, input, principal);
+  const now = new Date();
+  coordination.claim.heartbeatAt = now.toISOString();
+  coordination.claim.expiresAt = new Date(now.getTime() + CLAIM_TTL_SECONDS * 1000).toISOString();
+  addCoordinationEvent(coordination, 'heartbeat', principal, { claimId: coordination.claim.id });
+  writeCoordination(project, id, coordination);
+  sendJson(res, 200, getProjectCard(project, id));
+}
+
+function handleReleaseCard(res, project, id, body, principal) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const card = getProjectCard(project, id);
+  const coordination = requireOwnedActiveClaim(project, card, input, principal);
+  const claimId = coordination.claim.id;
+  coordination.state = 'available';
+  coordination.claim = null;
+  addCoordinationEvent(coordination, 'released', principal, { claimId });
+  writeCoordination(project, id, coordination);
+  card.agent = '';
+  if (card.stage === 'implementing') card.stage = 'ready';
+  writeCard(card, project.id);
+  sendJson(res, 200, getProjectCard(project, id));
+}
+
+function handleSubmitCard(res, project, id, body, principal) {
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const card = getProjectCard(project, id);
+  const coordination = requireOwnedActiveClaim(project, card, input, principal);
+  if (typeof input.revision !== 'string' || !/^[0-9a-f]{7,64}$/i.test(input.revision)) {
+    throw new ApiError(400, 'revision 必須是 7 到 64 位 git commit SHA');
+  }
+  if (typeof input.summary !== 'string' || !input.summary.trim() || input.summary.length > 4000) {
+    throw new ApiError(400, 'summary 必須是 1 到 4000 字元');
+  }
+  const checks = validateChecks(input.checks, { requireSuccess: true });
+  const artifacts = input.artifacts === undefined ? [] : input.artifacts;
+  if (
+    !Array.isArray(artifacts) || artifacts.length > 50 ||
+    artifacts.some((item) => typeof item !== 'string' || !item.trim() || item.length > 1000)
+  ) {
+    throw new ApiError(400, 'artifacts 必須是最多 50 項的非空字串陣列');
+  }
+  if (input.residual !== undefined && (typeof input.residual !== 'string' || input.residual.length > 4000)) {
+    throw new ApiError(400, 'residual 最多 4000 字元');
+  }
+  const submission = {
+    id: randomUUID(),
+    implementerId: coordination.claim.agentId,
+    claimId: coordination.claim.id,
+    revision: input.revision.toLowerCase(),
+    summary: input.summary.trim(),
+    checks,
+    artifacts: artifacts.map((item) => item.trim()),
+    residual: input.residual || '',
+    submittedAt: new Date().toISOString(),
+  };
+  coordination.state = 'review_pending';
+  coordination.submission = submission;
+  addCoordinationEvent(coordination, 'submitted', principal, {
+    claimId: submission.claimId,
+    submissionId: submission.id,
+    revision: submission.revision,
+  });
+  writeCoordination(project, id, coordination);
+  card.stage = 'verify';
+  card.evidence = {
+    commands: checks.map((check) => check.command),
+    findings: checks.map((check) => check.summary),
+    residual: submission.residual,
+  };
+  writeCard(card, project.id);
+  sendJson(res, 200, getProjectCard(project, id));
+}
+
+function handleReviewCard(res, project, id, body, principal) {
+  requireRole(principal, 'reviewer');
+  const input = parseBody(body);
+  if (!isPlainObject(input)) throw new ApiError(400, 'body 必須是 object');
+  const card = getProjectCard(project, id);
+  const coordination = readCoordination(project, id);
+  if (coordination.state !== 'review_pending' || !coordination.submission) {
+    throw new ApiError(409, id + ' 目前不在 review_pending');
+  }
+  if (input.submissionId !== coordination.submission.id) {
+    throw new ApiError(409, 'submissionId 不是目前待審版本');
+  }
+  if (principal.id === coordination.submission.implementerId) {
+    throw new ApiError(409, '實作者不得審查自己的 submission');
+  }
+  if (!['approved', 'changes_requested'].includes(input.verdict)) {
+    throw new ApiError(400, 'verdict 只允許 approved/changes_requested');
+  }
+  if (typeof input.summary !== 'string' || !input.summary.trim() || input.summary.length > 4000) {
+    throw new ApiError(400, 'summary 必須是 1 到 4000 字元');
+  }
+  const checks = validateChecks(input.checks, { requireSuccess: input.verdict === 'approved' });
+  const findings = input.findings === undefined ? [] : input.findings;
+  if (
+    !Array.isArray(findings) || findings.length > 100 ||
+    findings.some((item) => typeof item !== 'string' || item.length > 4000)
+  ) {
+    throw new ApiError(400, 'findings 必須是最多 100 項字串陣列');
+  }
+  const review = {
+    id: randomUUID(),
+    submissionId: coordination.submission.id,
+    reviewerId: principal.id,
+    verdict: input.verdict,
+    summary: input.summary.trim(),
+    checks,
+    findings,
+    reviewedAt: new Date().toISOString(),
+  };
+  coordination.reviews.push(review);
+  coordination.state = input.verdict;
+  coordination.claim = null;
+  addCoordinationEvent(coordination, 'reviewed', principal, {
+    submissionId: review.submissionId,
+    reviewId: review.id,
+    verdict: review.verdict,
+  });
+  writeCoordination(project, id, coordination);
+  if (input.verdict === 'approved') {
+    card.stage = 'done';
+    card.gates.test = true;
+    card.gates.code_review = true;
+  } else {
+    card.stage = 'implementing';
+  }
+  writeCard(card, project.id);
+  sendJson(res, 200, getProjectCard(project, id));
 }
 
 function handleDelete(res, project, id) {
@@ -1082,6 +1484,7 @@ function handleDelete(res, project, id) {
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
   const pathname = requestUrl.pathname;
+  const principal = authenticateRequest(req);
   try {
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -1109,8 +1512,45 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/config') {
-      if (req.method === 'GET') return sendJson(res, 200, { owner: DEFAULT_OWNER, authRequired: !!AUTH_TOKEN });
+      if (req.method === 'GET') {
+        return sendJson(res, 200, {
+          owner: DEFAULT_OWNER,
+          authRequired: !!AUTH_TOKEN || AUTH_IDENTITIES.length > 0,
+          identityAuth: AUTH_IDENTITIES.length > 0,
+          claimTtlSeconds: CLAIM_TTL_SECONDS,
+          readAuthRequired: REQUIRE_READ_AUTH,
+        });
+      }
       return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    if (pathname === '/api/health') {
+      if (!['GET', 'HEAD'].includes(req.method)) {
+        return sendJson(res, 405, { error: 'method not allowed' });
+      }
+      readProjects();
+      return sendJson(res, 200, {
+        status: 'ok',
+        storage: 'readable',
+        time: new Date().toISOString(),
+      });
+    }
+
+    if (pathname === '/api/identity') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });
+      if (!principal) {
+        res.setHeader('WWW-Authenticate', 'Bearer');
+        return sendJson(res, 401, { error: '需要有效的 bearer token' });
+      }
+      return sendJson(res, 200, principal);
+    }
+
+    if (
+      REQUIRE_READ_AUTH && pathname.startsWith('/api/') &&
+      ['GET', 'HEAD'].includes(req.method) && !principal
+    ) {
+      res.setHeader('WWW-Authenticate', 'Bearer');
+      return sendJson(res, 401, { error: '讀取 API 需要有效的 bearer token' });
     }
 
     if (pathname === '/api/epics') {
@@ -1118,9 +1558,14 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 
-    if (pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !hasValidBearerToken(req)) {
-      res.setHeader('WWW-Authenticate', 'Bearer');
-      return sendJson(res, 401, { error: '需要有效的 bearer token' });
+    if (pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      if (!principal) {
+        res.setHeader('WWW-Authenticate', 'Bearer');
+        return sendJson(res, 401, { error: '需要有效的 bearer token' });
+      }
+      if (principal.type === 'agent' && !isAgentCoordinationWrite(pathname)) {
+        return sendJson(res, 403, { error: 'agent token 不可呼叫 admin 寫入 API' });
+      }
     }
 
     // 跨專案聚合視圖（唯讀）：每張卡帶 project 欄位
@@ -1255,16 +1700,37 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 
-    const claimMatch = pathname.match(/^\/api\/projects\/([^/]+)\/cards\/([^/]+)\/claim$/);
-    if (claimMatch) {
-      const pid = decodeURIComponent(claimMatch[1]);
-      const cardId = decodeURIComponent(claimMatch[2]);
+    const nextClaimMatch = pathname.match(/^\/api\/projects\/([^/]+)\/claims\/next$/);
+    if (nextClaimMatch) {
+      const pid = decodeURIComponent(nextClaimMatch[1]);
+      const project = getProject(pid);
+      if (!project) throw new ApiError(404, '專案不存在：' + pid);
+      if (req.method === 'POST') {
+        return handleClaimNext(res, project, await readBody(req), principal);
+      }
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+
+    const coordinationMatch = pathname.match(
+      /^\/api\/projects\/([^/]+)\/cards\/([^/]+)\/(claim|heartbeat|release|submit|review)$/
+    );
+    if (coordinationMatch) {
+      const pid = decodeURIComponent(coordinationMatch[1]);
+      const cardId = decodeURIComponent(coordinationMatch[2]);
+      const action = coordinationMatch[3];
       const project = getProject(pid);
       if (!project) throw new ApiError(404, '專案不存在：' + pid);
       if (!cardIdRe(project.prefix).test(cardId)) {
         throw new ApiError(400, 'id 必須符合 ^' + project.prefix + '-\\d{3,}$');
       }
-      if (req.method === 'POST') return handleClaimCard(res, project, cardId, await readBody(req));
+      if (req.method === 'POST') {
+        const body = await readBody(req);
+        if (action === 'claim') return handleClaimCard(res, project, cardId, body, principal);
+        if (action === 'heartbeat') return handleHeartbeatCard(res, project, cardId, body, principal);
+        if (action === 'release') return handleReleaseCard(res, project, cardId, body, principal);
+        if (action === 'submit') return handleSubmitCard(res, project, cardId, body, principal);
+        return handleReviewCard(res, project, cardId, body, principal);
+      }
       return sendJson(res, 405, { error: 'method not allowed' });
     }
 

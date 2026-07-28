@@ -8,6 +8,7 @@
     "prekanban": "npm run build",
     "kanban": "node tools/kanban/server.mjs",
     "start": "npm run kanban",
+    "agent": "node scripts/monstrare-agent.mjs",
     "kanban:migrate": "node scripts/migrate-kanban-data.mjs",
     "test": "npm run build && node --test \"tools/kanban/test/*.test.mjs\""
   },

@@ -40,6 +40,9 @@
 | 接受提案 | pending proposal | 原子套用 operations 並增加 revision | base revision stale 回 `409` |
 | 轉成任務卡 | 選取未封存 task/experiment | 建卡並回寫 `linkedCardIds` | 已轉換節點不可重複轉換 |
 | 認領卡片 | agent id 非空且卡片未被他人認領 | card `agent` 寫入認領者 | 衝突回 `409 claimedBy` |
+| Agent lease | worker token 認領成功 | 顯示租約中與到期時間；heartbeat 延長 lease | 過期後其他 worker 可接手 |
+| 提交審查 | claim owner 附 git revision 與成功 checks | 卡片進入驗證、顯示待獨立審查 | checks 缺少或失敗時拒絕 |
+| Reviewer 核准 | reviewer 與 implementer 不同，且有獨立成功 checks | 卡片完成，test/code review gates 通過 | self-review 回 `409` |
 
 ## 設計系統對照
 

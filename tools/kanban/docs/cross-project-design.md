@@ -40,10 +40,14 @@ Zeabur、資料放 persistent volume」。
 | `KANBAN_PORT` | `4420` | 部署 / 測試用隨機埠 |
 | `KANBAN_DATA_DIR` | server.mjs 所在目錄 | 放 `projects.json` 與 `cards/`；Zeabur 指向 volume |
 | `KANBAN_AUTH_TOKEN` | 空 | Bearer token；非 loopback bind 時必填 |
+| `KANBAN_IDENTITIES_JSON` | `[]` | Agent identity / token / roles |
+| `KANBAN_CLAIM_TTL_SECONDS` | `900` | Agent claim lease 秒數 |
+| `KANBAN_REQUIRE_READ_AUTH` | `false` | 對外部署設 `true`，保護 GET API |
 | `KANBAN_MAX_BODY_BYTES` | `1048576` | request body 上限，超過回 413 |
 
-非 `127.0.0.1` / `localhost` / `::1` 的 bind 若未設定 `KANBAN_AUTH_TOKEN`，server 直接拒絕啟動。
-所有 POST / PUT / PATCH / DELETE API 都要求 `Authorization: Bearer <token>`；GET 維持唯讀公開，部署層仍應使用 HTTPS 與存取控制。
+非 `127.0.0.1` / `localhost` / `::1` 的 bind 若未設定 admin token 或 agent identities，
+server 直接拒絕啟動。所有寫入 API 都要求 bearer token；agent token 只可呼叫 coordination
+endpoints。`KANBAN_REQUIRE_READ_AUTH=true` 時，health/config 以外的 GET 也需 token。
 
 ## API 契約
 

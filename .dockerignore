@@ -1,0 +1,14 @@
+.git
+.github
+.playwright-cli
+ai
+node_modules
+output
+tools/kanban/cards
+tools/kanban/blueprints
+tools/kanban/coordination
+tools/kanban/epics
+tools/kanban/projects.json
+tools/kanban/test
+tools/kanban/mockups
+*.log

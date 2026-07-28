@@ -106,6 +106,11 @@
   .risk-medium { background: var(--warn-soft); color: var(--warn); }
   .risk-high { background: var(--crit-soft); color: var(--crit); }
   .agent-pill { background: var(--accent-soft); color: var(--accent); }
+  .coordination-pill { border: 1px solid var(--line-strong); background: var(--surface-sunken); color: var(--ink-dim); }
+  .coordination-pill.state-claimed { border-color: #28525a; background: var(--accent-soft); color: var(--accent); }
+  .coordination-pill.state-review_pending { border-color: #72571d; background: var(--warn-soft); color: var(--warn); }
+  .coordination-pill.state-changes_requested { border-color: #71333a; background: var(--crit-soft); color: var(--crit); }
+  .coordination-pill.state-approved { border-color: #245943; background: var(--good-soft); color: var(--good); }
   .track-pill { background: var(--surface-sunken); color: var(--ink-dim); font-weight: 600; }
   .dep-pill.dep-blocked { background: var(--crit-soft); color: var(--crit); }
   .dep-pill.dep-missing { background: var(--warn-soft); color: var(--warn); }
@@ -186,6 +191,8 @@
   .comment-form button { border: none; background: var(--accent); color: #071013; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; align-self: flex-start; }
   .claim-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
   .claim-form input { min-width: 0; height: 36px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-sunken); padding: 0 10px; }
+  .coordination-detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .coordination-detail .meta-value { font-size: 12px; }
   .modal-footer { display: flex; justify-content: space-between; padding: 0 24px 22px; }
   .danger-btn { border: 1px solid var(--crit-soft); background: var(--crit-soft); color: var(--crit); border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 700; }
   .danger-btn:hover { background: var(--crit); color: #fff; }
@@ -456,6 +463,7 @@
   "use strict";
   var COMMENT_AUTHOR = ""; // 開頁時由 /api/config 帶入本機 git user.name
   var AUTH_REQUIRED = false;
+  var READ_AUTH_REQUIRED = false;
   var API_TOKEN = "";
   try { API_TOKEN = sessionStorage.getItem("monstrare-token") || ""; } catch (_) {}
 
@@ -558,7 +566,7 @@
     });
   }
   function closeBlueprintStream() {
-    if (blueprintEventSource) blueprintEventSource.close();
+    if (blueprintEventSource) blueprintEventSource.abort();
     blueprintEventSource = null;
   }
   function loadActiveBlueprint() {
@@ -584,37 +592,82 @@
         connectBlueprintStream();
       });
   }
+  function acceptBlueprintRevisionEvent(revision) {
+    BLUEPRINT_EVENTS.unshift(revision);
+    BLUEPRINT_EVENTS = BLUEPRINT_EVENTS.slice(0, 30);
+    api(projectPath(ACTIVE_PROJECT, "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT)))
+      .then(function (document) {
+        BLUEPRINT_DOCUMENT = document;
+        renderBlueprint();
+      })
+      .catch(function (err) { showToast("藍圖更新失敗：" + err.message, true); });
+  }
   function connectBlueprintStream() {
-    if (!BLUEPRINT_DOCUMENT || typeof EventSource === "undefined") return;
+    if (!BLUEPRINT_DOCUMENT || typeof ReadableStream === "undefined") return;
     var url = projectPath(
       ACTIVE_PROJECT,
       "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT) + "/events?after=" + BLUEPRINT_DOCUMENT.revision
     );
-    blueprintEventSource = new EventSource(url);
-    blueprintEventSource.addEventListener("blueprint-revision", function (event) {
-      var revision;
-      try { revision = JSON.parse(event.data); } catch (_) { return; }
-      BLUEPRINT_EVENTS.unshift(revision);
-      BLUEPRINT_EVENTS = BLUEPRINT_EVENTS.slice(0, 30);
-      api(projectPath(ACTIVE_PROJECT, "/blueprints/" + encodeURIComponent(ACTIVE_BLUEPRINT)))
-        .then(function (document) {
-          BLUEPRINT_DOCUMENT = document;
-          renderBlueprint();
-        })
-        .catch(function (err) { showToast("藍圖更新失敗：" + err.message, true); });
+    var controller = new AbortController();
+    var headers = { Accept: "text/event-stream" };
+    if (API_TOKEN) headers.Authorization = "Bearer " + API_TOKEN;
+    blueprintEventSource = controller;
+    fetch(url, { headers: headers, signal: controller.signal }).then(function (response) {
+      if (!response.ok) throw new Error("SSE " + response.status);
+      if (!response.body) throw new Error("瀏覽器不支援 streaming response");
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+      function consumeBlock(block) {
+        var eventName = "";
+        var data = [];
+        block.split(/\r?\n/).forEach(function (line) {
+          if (line.indexOf("event:") === 0) eventName = line.slice(6).trim();
+          if (line.indexOf("data:") === 0) data.push(line.slice(5).trim());
+        });
+        if (eventName !== "blueprint-revision" || !data.length) return;
+        try { acceptBlueprintRevisionEvent(JSON.parse(data.join("\n"))); } catch (_) {}
+      }
+      function pump() {
+        return reader.read().then(function (chunk) {
+          if (chunk.done) return;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          var boundary;
+          while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+            consumeBlock(buffer.slice(0, boundary));
+            buffer = buffer.slice(boundary + 2);
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (err) {
+      if (controller.signal.aborted) return;
+      showToast("藍圖串流中斷：" + err.message, true);
+      if (blueprintEventSource === controller) {
+        blueprintEventSource = null;
+        setTimeout(connectBlueprintStream, 2000);
+      }
     });
   }
   function loadAll() {
-    return Promise.all([api("/api/config"), api("/api/projects")]).then(function (values) {
-      COMMENT_AUTHOR = values[0].owner || "匿名";
-      AUTH_REQUIRED = !!values[0].authRequired;
-      PROJECTS = values[1];
-      var saved = "";
-      try { saved = sessionStorage.getItem("monstrare-project") || ""; } catch (_) {}
-      if (saved === "__all__" || PROJECTS.some(function (p) { return p.id === saved; })) ACTIVE_PROJECT = saved;
-      else ACTIVE_PROJECT = PROJECTS.length ? PROJECTS[0].id : "__all__";
-      renderProjectControls();
-      return loadProjectData();
+    return api("/api/config").then(function (config) {
+      COMMENT_AUTHOR = config.owner || "匿名";
+      AUTH_REQUIRED = !!config.authRequired;
+      READ_AUTH_REQUIRED = !!config.readAuthRequired;
+      if (AUTH_REQUIRED && !API_TOKEN) {
+        renderProjectControls();
+        if (READ_AUTH_REQUIRED) return;
+      }
+      return api("/api/projects").then(function (projects) {
+        PROJECTS = projects;
+        var saved = "";
+        try { saved = sessionStorage.getItem("monstrare-project") || ""; } catch (_) {}
+        if (saved === "__all__" || PROJECTS.some(function (p) { return p.id === saved; })) ACTIVE_PROJECT = saved;
+        else ACTIVE_PROJECT = PROJECTS.length ? PROJECTS[0].id : "__all__";
+        renderProjectControls();
+        return loadProjectData();
+      });
     });
   }
   function saveOne(tk) {
@@ -660,10 +713,31 @@
     return '<span class="pill dep-pill dep-ok">前置卡已完成</span>';
   }
 
+  function coordinationLabel(coordination) {
+    if (!coordination) return "";
+    if (coordination.leaseExpired) return "租約已過期";
+    return {
+      available: "可認領",
+      claimed: "租約中",
+      review_pending: "待獨立審查",
+      changes_requested: "需修改",
+      approved: "已審核"
+    }[coordination.state] || coordination.state;
+  }
+
+  function coordinationBadge(tk) {
+    var coordination = tk.coordination;
+    if (!coordination || coordination.state === "available" && !coordination.leaseExpired) return "";
+    var state = coordination.leaseExpired ? "available" : coordination.state;
+    return '<span class="pill coordination-pill state-' + escapeHtml(state) + '">' +
+      escapeHtml(coordinationLabel(coordination)) + "</span>";
+  }
+
   function cardHtml(tk) {
     var badges = '<span class="pill risk-' + tk.risk + '">' + riskLabel(tk.risk) + "</span>";
     if (tk.track && tk.track !== "n/a") badges += '<span class="pill track-pill">' + trackLabel(tk.track) + "</span>";
     if (tk.agent) badges += '<span class="pill agent-pill">' + escapeHtml(tk.agent) + "</span>";
+    badges += coordinationBadge(tk);
     if (ACTIVE_PROJECT === "__all__" && tk.project) badges += '<span class="pill track-pill">' + escapeHtml(tk.project) + "</span>";
     if (tk.approvalRequired) badges += '<span class="pill approval-pill">需人工核准</span>';
     badges += dependsOnBadge(tk);
@@ -1053,7 +1127,24 @@
             '</span><span class="comment-time">' + escapeHtml(c.time) + '</span><div class="comment-text">' + escapeHtml(c.text) + "</div></div></div>";
         }).join("")
       : '<p class="no-comment">尚無留言。</p>';
-    var claimHtml = tk.agent
+    var coordination = tk.coordination || null;
+    var leaseExpiresAt = coordination && coordination.claim ? coordination.claim.expiresAt : "";
+    var submission = coordination && coordination.submission ? coordination.submission : null;
+    var reviews = coordination && coordination.reviews ? coordination.reviews : [];
+    var latestReview = reviews.length ? reviews[reviews.length - 1] : null;
+    var coordinationHtml = coordination
+      ? '<div><span class="modal-section-label">Agent 協作</span><div class="coordination-detail">' +
+        '<div class="meta-item"><span class="meta-label">狀態</span><span class="meta-value">' +
+        escapeHtml(coordinationLabel(coordination)) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">租約到期</span><span class="meta-value">' +
+        (leaseExpiresAt ? escapeHtml(new Date(leaseExpiresAt).toLocaleString()) : "—") + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">提交版本</span><span class="meta-value mono">' +
+        (submission ? escapeHtml(submission.revision) : "—") + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Reviewer</span><span class="meta-value">' +
+        (latestReview ? escapeHtml(latestReview.reviewerId) : "—") + "</span></div>" +
+        "</div></div>"
+      : "";
+    var claimHtml = tk.agent && !(coordination && coordination.leaseExpired)
       ? ""
       : '<div><span class="modal-section-label">Agent 認領</span><div class="claim-form">' +
         '<input id="claim-agent" placeholder="Agent 名稱" autocomplete="off">' +
@@ -1075,6 +1166,7 @@
       '<div class="meta-item meta-item-wide"><span class="meta-label">前置任務</span><span class="meta-value">' + escapeHtml(dependsOnText) + "</span></div>" +
       "</div>" +
       '<div class="modal-body">' +
+      coordinationHtml +
       claimHtml +
       '<div><span class="modal-section-label">描述</span><textarea class="content-input" id="field-content" placeholder="補充說明…">' + escapeHtml(tk.content) + "</textarea></div>" +
       '<div><span class="modal-section-label">相關檔案</span>' + refs + "</div>" +
@@ -1219,7 +1311,11 @@
     if (e.target.id === "token-apply") {
       API_TOKEN = document.getElementById("token-input").value.trim();
       try { sessionStorage.setItem("monstrare-token", API_TOKEN); } catch (_) {}
-      showToast(API_TOKEN ? "Token 已套用" : "Token 已清除");
+      loadAll().then(renderAll).then(function () {
+        showToast(API_TOKEN ? "Token 已套用" : "Token 已清除");
+      }).catch(function (err) {
+        showToast("Token 驗證失敗：" + err.message, true);
+      });
       return;
     }
     var blueprintModeButton = e.target.closest("[data-blueprint-mode]");

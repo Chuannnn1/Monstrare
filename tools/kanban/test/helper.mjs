@@ -19,6 +19,9 @@ export async function startServer(options = {}) {
       KANBAN_PORT: '0',
       KANBAN_DATA_DIR: dataDir,
       KANBAN_AUTH_TOKEN: options.token || '',
+      KANBAN_IDENTITIES_JSON: JSON.stringify(options.identities || []),
+      KANBAN_CLAIM_TTL_SECONDS: String(options.claimTtlSeconds || 900),
+      KANBAN_REQUIRE_READ_AUTH: options.requireReadAuth ? 'true' : 'false',
       KANBAN_MAX_BODY_BYTES: String(options.maxBodyBytes || 1024 * 1024),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -51,7 +54,7 @@ export async function startServer(options = {}) {
     if (child.exitCode !== null) break; // server 已退出（例如 EADDRINUSE）
     if (base) {
       try {
-        const r = await fetch(base + '/api/cards');
+        const r = await fetch(base + '/api/health');
         if (r.ok) {
           return {
             base,

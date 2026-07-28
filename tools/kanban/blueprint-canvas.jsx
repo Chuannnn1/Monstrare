@@ -42,8 +42,10 @@ function nodeElementId(nodeId) {
   return "bp_node_" + nodeId;
 }
 
-function documentToElements(document) {
+function documentToElements(document, previewNodeIds = [], previewEdgeIds = []) {
   if (!document) return [];
+  const previewNodes = new Set(previewNodeIds);
+  const previewEdges = new Set(previewEdgeIds);
   const activeNodes = document.nodes.filter((node) => !node.archived);
   const nodeIds = new Set(activeNodes.map((node) => node.id));
   const layoutById = new Map();
@@ -51,6 +53,7 @@ function documentToElements(document) {
     const layout = node.layout || defaultLayout(index);
     layoutById.set(node.id, layout);
     const colors = STATUS_COLORS[node.status] || STATUS_COLORS.draft;
+    const isPreview = previewNodes.has(node.id);
     const body = node.body ? "\n\n" + node.body.slice(0, 120) : "";
     return {
       id: nodeElementId(node.id),
@@ -59,11 +62,13 @@ function documentToElements(document) {
       y: layout.y,
       width: layout.w,
       height: layout.h,
-      strokeColor: colors.stroke,
-      backgroundColor: colors.fill,
+      strokeColor: isPreview ? "#42c7d5" : colors.stroke,
+      backgroundColor: isPreview ? "#102b30" : colors.fill,
       fillStyle: "solid",
+      strokeStyle: isPreview ? "dashed" : "solid",
       strokeWidth: 2,
       roughness: 1,
+      opacity: isPreview ? 82 : 100,
       roundness: { type: 3 },
       label: {
         text: (TYPE_LABELS[node.type] || node.type) + "  " + node.title + body,
@@ -81,15 +86,18 @@ function documentToElements(document) {
     const to = layoutById.get(edge.to);
     const x = from.x + from.w;
     const y = from.y + from.h / 2;
+    const isPreview = previewEdges.has(edge.id);
     skeleton.push({
       id: "bp_edge_" + edge.id,
       type: "arrow",
       x,
       y,
       points: [[0, 0], [to.x - x, to.y + to.h / 2 - y]],
-      strokeColor: "#b5bec8",
+      strokeColor: isPreview ? "#42c7d5" : "#b5bec8",
+      strokeStyle: isPreview ? "dashed" : "solid",
       strokeWidth: 2,
       roughness: 1,
+      opacity: isPreview ? 82 : 100,
       startBinding: { elementId: nodeElementId(edge.from), focus: 0, gap: 8 },
       endBinding: { elementId: nodeElementId(edge.to), focus: 0, gap: 8 },
       startArrowhead: null,
@@ -103,12 +111,23 @@ function documentToElements(document) {
 }
 
 function BlueprintCanvas() {
-  const [document, setDocument] = React.useState(window.__MONSTRARE_BLUEPRINT__ || null);
+  const initialScene = window.__MONSTRARE_BLUEPRINT_SCENE__ || {
+    document: window.__MONSTRARE_BLUEPRINT__ || null,
+    previewNodeIds: [],
+    previewEdgeIds: [],
+    isPreview: false,
+  };
+  const [scene, setScene] = React.useState(initialScene);
+  const document = scene.document;
   const apiRef = useRef(null);
   const documentRef = useRef(document);
+  const isPreviewRef = useRef(scene.isPreview);
   const ignoreChangesUntil = useRef(0);
   const layoutTimer = useRef(null);
-  const elements = useMemo(() => documentToElements(document), [document]);
+  const elements = useMemo(
+    () => documentToElements(document, scene.previewNodeIds, scene.previewEdgeIds),
+    [document, scene.previewNodeIds, scene.previewEdgeIds],
+  );
 
   function fitScene(nextElements = elements) {
     if (!apiRef.current || !nextElements.length) return;
@@ -130,13 +149,19 @@ function BlueprintCanvas() {
   }
 
   useEffect(() => {
-    const onDocument = (event) => setDocument(event.detail || null);
+    const onDocument = (event) => {
+      const detail = event.detail || null;
+      setScene(detail && Object.hasOwn(detail, "document")
+        ? detail
+        : { document: detail, previewNodeIds: [], previewEdgeIds: [], isPreview: false });
+    };
     window.addEventListener("monstrare:blueprint-document", onDocument);
     return () => window.removeEventListener("monstrare:blueprint-document", onDocument);
   }, []);
 
   useEffect(() => {
     documentRef.current = document;
+    isPreviewRef.current = scene.isPreview;
     if (!apiRef.current) return;
     ignoreChangesUntil.current = Date.now() + 500;
     apiRef.current.updateScene({
@@ -147,7 +172,7 @@ function BlueprintCanvas() {
     if (elements.length) {
       requestAnimationFrame(() => fitScene(elements));
     }
-  }, [document, elements]);
+  }, [document, elements, scene.isPreview]);
 
   useEffect(() => {
     if (!rootElement || typeof ResizeObserver === "undefined") return undefined;
@@ -174,6 +199,7 @@ function BlueprintCanvas() {
       detail: selected ? selected.slice("bp_node_".length) : "",
     }));
 
+    if (isPreviewRef.current) return;
     if (!documentRef.current || Date.now() < ignoreChangesUntil.current) return;
     clearTimeout(layoutTimer.current);
     layoutTimer.current = setTimeout(() => {

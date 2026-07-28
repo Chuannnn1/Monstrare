@@ -36,6 +36,7 @@
 |---|---|---|---|
 | 移動節點 | 選取 semantic node 並拖曳 | 送出 `patchNode.layout` revision | revision stale 回 `409` 後 reload |
 | 留言 | 有文字，可選或不選 node | 寫入 node-scoped 或 global discussion | 輸入空白不送出 |
+| 預覽提案 | pending proposal | cyan dashed 投影 agent operations；不增加 revision、不寫回 layout | 無法解析時保留正式 document 並顯示錯誤 |
 | 接受提案 | pending proposal | 原子套用 operations 並增加 revision | base revision stale 回 `409` |
 | 轉成任務卡 | 選取未封存 task/experiment | 建卡並回寫 `linkedCardIds` | 已轉換節點不可重複轉換 |
 | 認領卡片 | agent id 非空且卡片未被他人認領 | card `agent` 寫入認領者 | 衝突回 `409 claimedBy` |
@@ -53,5 +54,6 @@
 - 1440px 桌面可同時看到 project nav、canvas 與 inspector。
 - 390px 手機沒有橫向頁面 overflow；project rail、主要 tabs 與 Blueprint toolbar 不重疊。
 - Canvas desktop 初始 framing 約 80% zoom；mobile 優先讓單一節點文字可讀，不強制塞入全圖。
+- Agent proposal 預覽以 cyan dashed node / edge 區隔，離開預覽後正式 scene 不殘留草稿元素。
 - Kanban lane 在桌面固定 282px，手機為 86vw，卡片標題與 metadata 保有間距。
 - 介面使用自然、任務導向的繁體中文，不放模板式英文 eyebrow 或功能自述。

@@ -270,12 +270,14 @@
   .blueprint-discussion-form { margin-top: 12px; }
   .blueprint-discussion-form textarea { width: 100%; min-height: 72px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-sunken); padding: 8px; font-size: 13px; line-height: 1.5; }
   .blueprint-discussion-form .toolbar-btn { width: 100%; margin-top: 8px; }
-  .blueprint-proposal { padding: 12px; background: var(--surface-sunken); }
+  .blueprint-proposal { padding: 12px; border: 1px solid transparent; background: var(--surface-sunken); }
+  .blueprint-proposal.is-previewing { border-color: var(--accent); background: var(--accent-soft); }
   .blueprint-proposal-agent { font-size: 12px; font-weight: 700; color: var(--accent); }
   .blueprint-proposal-message { margin-top: 4px; font-size: 13px; line-height: 1.55; color: var(--ink-dim); }
-  .blueprint-proposal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .blueprint-proposal-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
   .blueprint-proposal-actions button { height: 32px; border-radius: 4px; font-size: 12px; font-weight: 700; }
   .proposal-accept { border: 0; background: var(--good); color: #07130f; }
+  .proposal-preview { border: 1px solid var(--accent); background: transparent; color: var(--accent); }
   .proposal-reject { border: 1px solid var(--line-strong); background: transparent; color: var(--ink-dim); }
   .blueprint-panel-empty { color: var(--ink-faint); font-size: 12px; line-height: 1.5; }
 
@@ -477,6 +479,7 @@
   var BLUEPRINT_EVENTS = [];
   var BLUEPRINT_DISCUSSIONS = [];
   var BLUEPRINT_PROPOSALS = [];
+  var PREVIEW_PROPOSAL_ID = "";
   var SELECTED_BLUEPRINT_NODE = "";
   var BLUEPRINT_MODE = "canvas";
   var blueprintEventSource = null;
@@ -563,6 +566,7 @@
     BLUEPRINT_EVENTS = [];
     BLUEPRINT_DISCUSSIONS = [];
     BLUEPRINT_PROPOSALS = [];
+    PREVIEW_PROPOSAL_ID = "";
     SELECTED_BLUEPRINT_NODE = "";
     if (ACTIVE_PROJECT === "__all__" || !ACTIVE_BLUEPRINT) {
       BLUEPRINT_DOCUMENT = null;
@@ -786,6 +790,83 @@
       '<div class="blueprint-node-meta">' + escapeHtml(node.id) + ' · ' + escapeHtml(node.updatedBy || node.createdBy || "") + '</div></button>';
   }
 
+  function applyProposalPreview(document, proposal) {
+    var preview = JSON.parse(JSON.stringify(document));
+    var previewNodeIds = [];
+    var previewEdgeIds = [];
+    var actorId = proposal.actor && proposal.actor.id ? proposal.actor.id : "agent";
+    proposal.operations.forEach(function (operation) {
+      if (operation.type === "upsertNode" && operation.node) {
+        var nodeIndex = preview.nodes.findIndex(function (node) { return node.id === operation.node.id; });
+        var existingNode = nodeIndex >= 0 ? preview.nodes[nodeIndex] : null;
+        var nextNode = Object.assign({
+          body: "", status: "draft", confidence: null, refs: [], linkedCardIds: [],
+          layout: null, archived: false, createdBy: actorId
+        }, existingNode || {}, operation.node, { updatedBy: actorId });
+        if (nodeIndex >= 0) preview.nodes[nodeIndex] = nextNode;
+        else preview.nodes.push(nextNode);
+        previewNodeIds.push(nextNode.id);
+        return;
+      }
+      if (operation.type === "patchNode") {
+        var patchIndex = preview.nodes.findIndex(function (node) { return node.id === operation.nodeId; });
+        if (patchIndex >= 0) {
+          preview.nodes[patchIndex] = Object.assign(
+            {},
+            preview.nodes[patchIndex],
+            operation.changes || {},
+            { updatedBy: actorId }
+          );
+          previewNodeIds.push(operation.nodeId);
+        }
+        return;
+      }
+      if (operation.type === "archiveNode") {
+        var archivedNode = preview.nodes.find(function (node) { return node.id === operation.nodeId; });
+        if (archivedNode) {
+          archivedNode.archived = true;
+          archivedNode.updatedBy = actorId;
+          previewNodeIds.push(operation.nodeId);
+        }
+        return;
+      }
+      if (operation.type === "upsertEdge" && operation.edge) {
+        var edgeIndex = preview.edges.findIndex(function (edge) { return edge.id === operation.edge.id; });
+        var nextEdge = Object.assign(
+          { label: "", archived: false },
+          edgeIndex >= 0 ? preview.edges[edgeIndex] : {},
+          operation.edge
+        );
+        if (edgeIndex >= 0) preview.edges[edgeIndex] = nextEdge;
+        else preview.edges.push(nextEdge);
+        previewEdgeIds.push(nextEdge.id);
+        return;
+      }
+      if (operation.type === "archiveEdge") {
+        var archivedEdge = preview.edges.find(function (edge) { return edge.id === operation.edgeId; });
+        if (archivedEdge) {
+          archivedEdge.archived = true;
+          previewEdgeIds.push(operation.edgeId);
+        }
+      }
+    });
+    return {
+      document: preview,
+      previewNodeIds: previewNodeIds,
+      previewEdgeIds: previewEdgeIds,
+      isPreview: true
+    };
+  }
+
+  function currentBlueprintScene() {
+    var proposal = BLUEPRINT_PROPOSALS.find(function (item) {
+      return item.id === PREVIEW_PROPOSAL_ID && item.status === "pending";
+    });
+    return proposal
+      ? applyProposalPreview(BLUEPRINT_DOCUMENT, proposal)
+      : { document: BLUEPRINT_DOCUMENT, previewNodeIds: [], previewEdgeIds: [], isPreview: false };
+  }
+
   function renderBlueprintInspector() {
     var selected = BLUEPRINT_DOCUMENT && BLUEPRINT_DOCUMENT.nodes.find(function (node) {
       return node.id === SELECTED_BLUEPRINT_NODE;
@@ -809,11 +890,15 @@
     var pending = BLUEPRINT_PROPOSALS.filter(function (proposal) { return proposal.status === "pending"; });
     document.getElementById("blueprint-proposal-list").innerHTML = pending.length
       ? pending.map(function (proposal) {
-          return '<article class="blueprint-proposal"><div class="blueprint-proposal-agent">' +
+          var isPreviewing = proposal.id === PREVIEW_PROPOSAL_ID;
+          return '<article class="blueprint-proposal' + (isPreviewing ? " is-previewing" : "") +
+            '"><div class="blueprint-proposal-agent">' +
             escapeHtml(proposal.actor.id) + ' · ' + proposal.operations.length + ' 個變更</div>' +
             '<div class="blueprint-proposal-message">' +
             escapeHtml(proposal.message || "未附說明") + '</div>' +
             '<div class="blueprint-proposal-actions">' +
+            '<button type="button" class="proposal-preview" data-proposal-preview="' +
+            escapeHtml(proposal.id) + '">' + (isPreviewing ? "取消預覽" : "預覽") + '</button>' +
             '<button type="button" class="proposal-accept" data-proposal-action="accept" data-proposal-id="' +
             escapeHtml(proposal.id) + '">接受</button>' +
             '<button type="button" class="proposal-reject" data-proposal-action="reject" data-proposal-id="' +
@@ -879,8 +964,10 @@
       selected.archived ||
       ['task', 'experiment'].indexOf(selected.type) < 0 ||
       selected.linkedCardIds.length > 0;
-    window.__MONSTRARE_BLUEPRINT__ = BLUEPRINT_DOCUMENT;
-    window.dispatchEvent(new CustomEvent("monstrare:blueprint-document", { detail: BLUEPRINT_DOCUMENT }));
+    var scene = currentBlueprintScene();
+    window.__MONSTRARE_BLUEPRINT__ = scene.document;
+    window.__MONSTRARE_BLUEPRINT_SCENE__ = scene;
+    window.dispatchEvent(new CustomEvent("monstrare:blueprint-document", { detail: scene }));
     renderBlueprintInspector();
   }
 
@@ -901,6 +988,7 @@
   }
 
   function acceptBlueprintDocument(document) {
+    PREVIEW_PROPOSAL_ID = "";
     BLUEPRINT_DOCUMENT = document;
     var summary = BLUEPRINTS.find(function (item) { return item.id === document.id; });
     if (summary) {
@@ -1169,6 +1257,16 @@
       });
       return;
     }
+    var proposalPreviewButton = e.target.closest("[data-proposal-preview]");
+    if (proposalPreviewButton) {
+      var proposalId = proposalPreviewButton.dataset.proposalPreview;
+      PREVIEW_PROPOSAL_ID = PREVIEW_PROPOSAL_ID === proposalId ? "" : proposalId;
+      BLUEPRINT_MODE = "canvas";
+      SELECTED_BLUEPRINT_NODE = "";
+      renderBlueprint();
+      showToast(PREVIEW_PROPOSAL_ID ? "正在預覽 agent 草稿" : "已離開提案預覽");
+      return;
+    }
     var proposalButton = e.target.closest("[data-proposal-action]");
     if (proposalButton) {
       proposalButton.disabled = true;
@@ -1180,6 +1278,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ actor: { type: "human", id: blueprintActorId() } })
       }).then(function (result) {
+        PREVIEW_PROPOSAL_ID = "";
         var index = BLUEPRINT_PROPOSALS.findIndex(function (proposal) {
           return proposal.id === result.proposal.id;
         });

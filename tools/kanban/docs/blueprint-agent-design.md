@@ -130,13 +130,62 @@ Edge 必填 `id / from / to / relation`，relation 允許：
 所有 POST 沿用 `KANBAN_AUTH_TOKEN`。SSE event name 為 `blueprint-revision`，`data` 是 revision
 event（不含重複的 full snapshot），renderer 依 operations streaming 更新畫面。
 
+## Agent drawing flow
+
+Agent 不需要模擬滑鼠，也不直接產生 Excalidraw JSON。它讀取目前的 semantic document，
+再用 typed operations 描述要新增或修改的節點與關係；前端會把 operations 即時投影成
+人可閱讀的 Excalidraw scene。
+
+需要人工審核時，agent 建立 proposal：
+
+```http
+POST /api/projects/monstrare/blueprints/agent-workflow/proposals
+Authorization: Bearer <KANBAN_AUTH_TOKEN>
+Content-Type: application/json
+
+{
+  "baseRevision": 9,
+  "actor": {
+    "type": "agent",
+    "id": "codex",
+    "model": "gpt"
+  },
+  "message": "補上 VM 單點故障與備援工作",
+  "operations": [
+    {
+      "type": "upsertNode",
+      "node": {
+        "id": "risk-single-point",
+        "type": "risk",
+        "title": "VM 成為單點故障",
+        "status": "hypothesis"
+      }
+    },
+    {
+      "type": "upsertEdge",
+      "edge": {
+        "id": "edge-risk-hosting",
+        "from": "risk-single-point",
+        "to": "hosting-plan",
+        "relation": "contradicts"
+      }
+    }
+  ]
+}
+```
+
+使用者可先在 canvas 預覽 cyan dashed node / edge；預覽期間不會建立 revision，也不會把
+拖曳 layout 寫回正式 document。按下接受後才原子套用 operations。若工作流允許 agent
+直接提交，可改呼叫 `/operations`；提交後由 SSE 將 revision stream 給所有已連線 client。
+
 ## Implemented v1
 
 - Excalidraw renderer adapter 將 semantic nodes / edges 投影成可縮放、可選取、可移動的畫布；
   layout 調整會轉成 `patchNode` operation，語意 document 仍是 source of truth。
 - Outline 是無 canvas 環境的可讀 fallback。
 - 討論可綁定目前選取的 node，也可記在整張藍圖。
-- agent proposal 先 dry-run 驗證；人工接受才建立 revision，拒絕不改 document。
+- agent proposal 先 dry-run 驗證；可在 canvas 預覽 cyan dashed 變更，人工接受才建立
+  revision，取消預覽或拒絕皆不改 document。
 - `task` / `experiment` node 可 materialize 成 project-scoped cards，並回寫 `linkedCardIds`。
 - 卡片 claim 採 first-writer-wins；已被其他 agent 認領時回 `409` 與 `claimedBy`。
 - 桌面使用固定左側 project nav；窄螢幕改為橫向 project rail，canvas 與 inspector 垂直排列。
@@ -144,5 +193,5 @@ event（不含重複的 full snapshot），renderer 依 operations streaming 更
 ## Current limits
 
 - Excalidraw 的自由手繪元素不是 semantic document 的一部分；v1 只持久化 node layout。
-- proposal 目前以整批 operations 顯示摘要，尚未提供逐欄位 visual diff。
+- proposal 已能在 canvas 預覽 node / edge 結果，但 inspector 尚未提供逐欄位文字 diff。
 - claim 只建立 owner，不含 lease / heartbeat；agent crash 後仍需人工重新指派。

@@ -79,6 +79,16 @@ test('Blueprint workbench 接上 canvas、discussion、proposal 與 materialize 
   );
 });
 
+test('agent proposal 可先投影到 Excalidraw，preview 不得寫回正式 layout', () => {
+  assert.match(script, /function applyProposalPreview/);
+  assert.match(script, /data-proposal-preview/);
+  assert.match(script, /previewNodeIds/);
+  assert.match(script, /PREVIEW_PROPOSAL_ID/);
+  assert.match(blueprintCanvas, /strokeStyle: isPreview \? "dashed" : "solid"/);
+  assert.match(blueprintCanvas, /isPreviewRef\.current/);
+  assert.match(blueprintCanvas, /if \(isPreviewRef\.current\) return/);
+});
+
 test('介面文案避免混用舊版 AI workflow 樣板字詞', () => {
   assert.doesNotMatch(html, /STREAM READY|ALL PROJECTS|Agent Operations/);
   assert.doesNotMatch(html, /spec-interrogation|implementation-plan/);

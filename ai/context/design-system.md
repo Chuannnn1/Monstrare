@@ -72,7 +72,7 @@
 | Modal/Dialog | 已實作 | closed/open/error/save/delete/claim | surface, modal shadow | `tools/kanban/index.html` `.modal` | Kanban | S4 |
 | Toast/Alert | 已實作 | success/error | accent/crit | `tools/kanban/index.html` `.toast` | Runtime | S4 |
 | Blueprint Canvas | 已實作 | loading/empty/document/selection/layout | surface-sunken, semantic colors | `tools/kanban/blueprint-canvas.jsx` | Blueprint 證據圖 | Blueprint v1 |
-| Blueprint Inspector | 已實作 | empty/discussion/pending proposal/history | surface, line, ink tiers | `tools/kanban/index.html` `.blueprint-inspector` | Blueprint 證據圖 | Blueprint v1 |
+| Blueprint Inspector | 已實作 | empty/discussion/pending proposal/preview/history | surface, line, ink tiers, accent-soft | `tools/kanban/index.html` `.blueprint-inspector` | Blueprint 證據圖 | Blueprint v1 |
 
 （「來源階段」記錄這個元件是 S4 初建，還是後續某個功能 Epic 補做並回登的。）
 

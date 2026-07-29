@@ -21,7 +21,11 @@ test('frontend 使用 neutral dark-tech palette 與 responsive sidebar', () => {
   assert.match(html, /--paper: #090b0e/);
   assert.match(html, /--accent: #42c7d5/);
   assert.match(html, /grid-template-columns: 236px minmax\(0, 1fr\)/);
-  assert.match(html, /flex: 0 0 282px/);
+  assert.match(
+    html,
+    /\.lane \{ flex: 1 0 282px;/,
+    'desktop lanes should fill spare workspace width while preserving a readable minimum',
+  );
   assert.match(html, /Segoe UI Variable Text/);
   assert.match(html, /@media \(max-width: 760px\)/);
   assert.doesNotMatch(html, /linear-gradient/);
